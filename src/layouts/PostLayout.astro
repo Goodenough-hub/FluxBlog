@@ -1,0 +1,66 @@
+---
+import Layout from "./Layout.astro";
+import config from "@/config";
+
+type Props = {
+  title?: string;
+  description?: string;
+  ogImage?: string;
+  canonicalURL?: string;
+  publishedAt?: Date;
+  updatedAt?: Date | null;
+};
+
+const { site } = config;
+
+const { title, description, ogImage, canonicalURL, publishedAt, updatedAt } =
+  Astro.props;
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  headline: title ?? site.title,
+  image: ogImage,
+  ...(publishedAt && { datePublished: publishedAt.toISOString() }),
+  ...(updatedAt && { dateModified: updatedAt.toISOString() }),
+  author: [
+    {
+      "@type": "Person",
+      name: site.author,
+      ...(site.profile && { url: site.profile }),
+    },
+  ],
+};
+---
+
+<Layout {title} {description} {ogImage} {canonicalURL}>
+  <Fragment slot="head">
+    <!-- Override og:type for article pages -->
+    <meta property="og:type" content="article" />
+
+    {
+      publishedAt && (
+        <meta
+          property="article:published_time"
+          content={publishedAt.toISOString()}
+        />
+      )
+    }
+    {
+      updatedAt && (
+        <meta
+          property="article:modified_time"
+          content={updatedAt.toISOString()}
+        />
+      )
+    }
+
+    <script
+      type="application/ld+json"
+      is:inline
+      set:html={JSON.stringify(structuredData)}
+    />
+  </Fragment>
+
+  <slot />
+</Layout>

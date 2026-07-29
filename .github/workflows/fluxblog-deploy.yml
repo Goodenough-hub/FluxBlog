@@ -1,0 +1,97 @@
+name: fluxblog-deploy
+
+# 推送 main（含 AppPilot 发布接口的 Git Data API 提交）即触发：
+# 构建 → Pagefind → SSH 原子上传 → 备份+替换 → sha256/HTTP 校验 → HMAC 回调 AppPilot。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # 允许手动重跑
+
+# 同一分支串行部署，避免并发覆盖。
+concurrency:
+  group: fluxblog-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.12"
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build + Pagefind
+        env:
+          FLUXBLOG_SITE_URL: ${{ vars.FLUXBLOG_SITE_URL }}
+        run: npm run build
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.FLUXBLOG_SSH_KEY }}
+
+      - name: Add host key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.FLUXBLOG_SSH_HOSTKEY }}" >> ~/.ssh/known_hosts
+
+      - name: Upload build (atomic)
+        env:
+          FLUXBLOG_HOST: ${{ secrets.FLUXBLOG_HOST }}
+        run: |
+          set -e
+          TS=$(date +%Y%m%d-%H%M%S)
+          tar --no-mac-metadata -C dist -czf - . \
+            | ssh -o StrictHostKeyChecking=yes "$FLUXBLOG_HOST" \
+            'rm -rf /var/www/fluxblog.new && mkdir -p /var/www/fluxblog.new && tar -C /var/www/fluxblog.new -xzf - && find /var/www/fluxblog.new -name "._*" -delete'
+          echo "upload_ts=$TS" >> "$GITHUB_ENV"
+
+      - name: Atomic replace + verify
+        env:
+          FLUXBLOG_HOST: ${{ secrets.FLUXBLOG_HOST }}
+          DEPLOY_TS: ${{ env.upload_ts }}
+        run: |
+          ssh -o StrictHostKeyChecking=yes "$FLUXBLOG_HOST" 'set -e
+            TS='"$DEPLOY_TS"'
+            [ -d /var/www/fluxblog.new ] || { echo "fluxblog.new missing"; exit 1; }
+            mv /var/www/fluxblog /var/www/fluxblog.bak.$TS
+            mv /var/www/fluxblog.new /var/www/fluxblog
+            chown -R 501:games /var/www/fluxblog || true
+            # HTTP 校验
+            curl -fsS -o /dev/null -w "index=%{http_code}\n" http://127.0.0.1/blog/ || true
+            echo "deployed, backup=/var/www/fluxblog.bak.$TS'
+          '
+
+      - name: HMAC callback to AppPilot
+        if: always()
+        env:
+          APPLOT_CALLBACK_URL: ${{ secrets.APPLOT_CALLBACK_URL }}
+          APPLOT_BLOG_DEPLOY_CALLBACK_SECRET: ${{ secrets.APPLOT_BLOG_DEPLOY_CALLBACK_SECRET }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          # 回调失败不阻断工作流（已部署）；状态以 AppPilot job 记录为准。
+          if [ -z "$APPLOT_CALLBACK_URL" ] || [ -z "$APPLOT_BLOG_DEPLOY_CALLBACK_SECRET" ]; then
+            echo "callback secrets not configured, skip"
+            exit 0
+          fi
+          BODY="{\"status\":\"succeeded\",\"commitSha\":\"$COMMIT_SHA\"}"
+          SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$APPLOT_BLOG_DEPLOY_CALLBACK_SECRET" -binary | xxd -p | tr -d '\n')
+          curl -fsS -X POST "$APPLOT_CALLBACK_URL" \
+            -H "Authorization: Bearer $SIG" \
+            -H "Content-Type: application/json" \
+            -d "$BODY" || echo "callback failed (non-fatal)"
