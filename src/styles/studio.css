@@ -47,3 +47,9 @@
 .status-draft { background: rgba(148,163,184,0.2); color: var(--muted-foreground, #888); }
 .status-publishing, .status-unpublishing { background: rgba(245,158,11,0.2); color: #f59e0b; }
 .status-published { background: rgba(34,197,94,0.2); color: #22c55e; }
+
+/* 版本冲突双栏比较 */
+.conflict-card { max-width: 760px; width: calc(100% - 48px); }
+.conflict-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.conflict-cols textarea { width: 100%; min-height: 200px; font-family: var(--font-google-sans-code, monospace); font-size: 12px; }
+@media (max-width: 640px) { .conflict-cols { grid-template-columns: 1fr; } }

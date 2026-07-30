@@ -1,97 +1,143 @@
 name: fluxblog-deploy
 
 # 推送 main（含 AppPilot 发布接口的 Git Data API 提交）即触发：
-# 构建 → Pagefind → SSH 原子上传 → 备份+替换 → sha256/HTTP 校验 → HMAC 回调 AppPilot。
+# build → deploy（原子替换 + SHA-256/HTTP 校验）→ callback（按 deploy 结果回调 AppPilot）。
+# 任一前置 job 失败则不部署；部署成功才发 succeeded，否则发 failed。
 on:
   push:
     branches: [main]
-  workflow_dispatch: # 允许手动重跑
+  workflow_dispatch:
 
-# 同一分支串行部署，避免并发覆盖。
 concurrency:
   group: fluxblog-deploy-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "22.12"
           cache: npm
-
-      - name: Install deps
-        run: npm ci
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Unit tests
-        run: npm test
-
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
       - name: Build + Pagefind
         env:
           FLUXBLOG_SITE_URL: ${{ vars.FLUXBLOG_SITE_URL }}
         run: npm run build
+      - name: SHA-256 manifest
+        run: |
+          cd dist
+          find . -type f ! -name manifest.sha256 -exec sha256sum {} + > manifest.sha256
+          echo "files=$(wc -l < manifest.sha256)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxblog-dist
+          path: dist
+          retention-days: 7
 
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.1
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: fluxblog-dist
+          path: dist
+      - uses: webfactory/ssh-agent@v0.9.1
         with:
           ssh-private-key: ${{ secrets.FLUXBLOG_SSH_KEY }}
-
       - name: Add host key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.FLUXBLOG_SSH_HOSTKEY }}" >> ~/.ssh/known_hosts
-
-      - name: Upload build (atomic)
+      - name: Upload (atomic)
         env:
           FLUXBLOG_HOST: ${{ secrets.FLUXBLOG_HOST }}
         run: |
           set -e
-          TS=$(date +%Y%m%d-%H%M%S)
-          tar --no-mac-metadata -C dist -czf - . \
+          # Ubuntu runner 用 GNU tar，不带 --no-mac-metadata（那是 macOS/BSD 选项）。
+          tar -C dist -czf - . \
             | ssh -o StrictHostKeyChecking=yes "$FLUXBLOG_HOST" \
-            'rm -rf /var/www/fluxblog.new && mkdir -p /var/www/fluxblog.new && tar -C /var/www/fluxblog.new -xzf - && find /var/www/fluxblog.new -name "._*" -delete'
-          echo "upload_ts=$TS" >> "$GITHUB_ENV"
-
-      - name: Atomic replace + verify
+            'rm -rf /var/www/fluxblog.new && mkdir -p /var/www/fluxblog.new && tar -C /var/www/fluxblog.new -xzf -'
+      - name: Atomic replace + SHA-256/HTTP verify
         env:
           FLUXBLOG_HOST: ${{ secrets.FLUXBLOG_HOST }}
-          DEPLOY_TS: ${{ env.upload_ts }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           ssh -o StrictHostKeyChecking=yes "$FLUXBLOG_HOST" 'set -e
-            TS='"$DEPLOY_TS"'
+            TS=$(date +%Y%m%d-%H%M%S)
             [ -d /var/www/fluxblog.new ] || { echo "fluxblog.new missing"; exit 1; }
-            mv /var/www/fluxblog /var/www/fluxblog.bak.$TS
+            # SHA-256 校验上传内容（manifest 在 dist 根，列出所有文件）
+            cd /var/www/fluxblog.new || exit 1
+            if [ -f manifest.sha256 ]; then
+              sha256sum -c manifest.sha256 || { echo "sha256 mismatch"; exit 1; }
+              rm -f manifest.sha256
+            fi
+            # 首次部署时 /var/www/fluxblog 不存在，条件式备份
+            if [ -d /var/www/fluxblog ]; then
+              mv /var/www/fluxblog /var/www/fluxblog.bak.$TS
+            else
+              rm -rf /var/www/fluxblog
+            fi
             mv /var/www/fluxblog.new /var/www/fluxblog
             chown -R 501:games /var/www/fluxblog || true
-            # HTTP 校验
-            curl -fsS -o /dev/null -w "index=%{http_code}\n" http://127.0.0.1/blog/ || true
-            echo "deployed, backup=/var/www/fluxblog.bak.$TS'
+            find /var/www/fluxblog -name "._*" -delete 2>/dev/null || true
+            # HTTP 校验：必须 200，失败即退出（不 || true）
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/blog/)
+            [ "$code" = "200" ] || { echo "HTTP check failed: $code"; exit 1; }
+            echo "deployed ok, backup=/var/www/fluxblog.bak.$TS (commit '$COMMIT_SHA' here for next step)"
           '
-
-      - name: HMAC callback to AppPilot
+      - name: Expose deploy result
+        id: result
         if: always()
+        run: echo "outcome=${{ job.status }}" >> "$GITHUB_OUTPUT"
+    outputs:
+      outcome: ${{ steps.result.outputs.outcome }}
+
+  callback:
+    needs: deploy
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Compute callback status
+        id: st
+        run: |
+          if [ "${{ needs.deploy.result }}" = "success" ]; then
+            echo "status=succeeded" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          fi
+      - name: HMAC callback to AppPilot (with retry)
         env:
           APPLOT_CALLBACK_URL: ${{ secrets.APPLOT_CALLBACK_URL }}
           APPLOT_BLOG_DEPLOY_CALLBACK_SECRET: ${{ secrets.APPLOT_BLOG_DEPLOY_CALLBACK_SECRET }}
           COMMIT_SHA: ${{ github.sha }}
+          STATUS: ${{ steps.st.outputs.status }}
         run: |
-          # 回调失败不阻断工作流（已部署）；状态以 AppPilot job 记录为准。
           if [ -z "$APPLOT_CALLBACK_URL" ] || [ -z "$APPLOT_BLOG_DEPLOY_CALLBACK_SECRET" ]; then
-            echo "callback secrets not configured, skip"
-            exit 0
+            echo "callback secrets not configured; cannot notify AppPilot. Marking job failed so it is visible."
+            exit 1
           fi
-          BODY="{\"status\":\"succeeded\",\"commitSha\":\"$COMMIT_SHA\"}"
+          BODY="{\"status\":\"$STATUS\",\"commitSha\":\"$COMMIT_SHA\"}"
           SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$APPLOT_BLOG_DEPLOY_CALLBACK_SECRET" -binary | xxd -p | tr -d '\n')
-          curl -fsS -X POST "$APPLOT_CALLBACK_URL" \
-            -H "Authorization: Bearer $SIG" \
-            -H "Content-Type: application/json" \
-            -d "$BODY" || echo "callback failed (non-fatal)"
+          # 重试 3 次：AppPilot job 停在 building 直到回调成功。
+          for i in 1 2 3; do
+            if curl -fsS -X POST "$APPLOT_CALLBACK_URL" \
+              -H "Authorization: Bearer $SIG" \
+              -H "Content-Type: application/json" \
+              -d "$BODY"; then
+              echo "callback delivered ($STATUS)"
+              exit 0
+            fi
+            echo "callback attempt $i failed, retrying…"
+            sleep 5
+          done
+          echo "callback failed after retries; AppPilot job may stay building."
+          exit 1

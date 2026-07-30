@@ -5,42 +5,22 @@ permissions:
 
 on:
   pull_request:
-    types:
-      - opened
-      - edited
-      - synchronize
-      - reopened
+    types: [opened, edited, synchronize, reopened]
   workflow_call:
 
 jobs:
   build:
-    name: Code standards & build
+    name: typecheck + test + build
     runs-on: ubuntu-latest
-    timeout-minutes: 3
-
+    timeout-minutes: 15
     steps:
-      - name: "☁️ Checkout repository"
-        uses: actions/checkout@v4
-
-      - name: "📦 Install pnpm"
-        uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          version: "11.3.0"
-
-      - name: Use Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: "pnpm"
-
-      - name: "📦 Install dependencies"
-        run: pnpm install --frozen-lockfile
-
-      - name: "🔎 Lint code"
-        run: pnpm run lint
-
-      - name: "📝 Checking code format"
-        run: pnpm run format:check
-
-      - name: "🚀 Build the project"
-        run: pnpm run build
+          node-version: "22.12"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build
+        run: npm run build

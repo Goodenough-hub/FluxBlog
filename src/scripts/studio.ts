@@ -8,9 +8,13 @@
  * 后端：${PUBLIC_BLOG_API}（默认同源 /api/v1/blog）。
  */
 import { initDB, saveSnapshot, loadSnapshot, clearSnapshot } from "./studio-idb";
+import { SaveController, type SaveInput } from "./save-controller";
 
 const API = import.meta.env.PUBLIC_BLOG_API || "/api/v1/blog";
 const TOKEN_KEY = "fluxblog_token";
+
+// 当前编辑器的保存控制器（renderEditor 创建）。发布/返回列表前 await flush()。
+let saveCtl: SaveController | null = null;
 
 type Draft = {
   id: number;
@@ -48,19 +52,6 @@ class ApiError extends Error {
   constructor(public status: number, msg: string, public detail?: any) {
     super(msg);
   }
-}
-
-// ---------- 防抖 ----------
-function debounce<T extends (...a: any[]) => any>(fn: T, ms: number) {
-  let t: ReturnType<typeof setTimeout> | null = null;
-  let lastArgs: Parameters<T> | null = null;
-  const wrapped = (...args: Parameters<T>) => {
-    lastArgs = args;
-    if (t) clearTimeout(t);
-    t = setTimeout(() => { t = null; if (lastArgs) fn(...lastArgs); }, ms);
-  };
-  wrapped.flush = () => { if (t) { clearTimeout(t); t = null; if (lastArgs) fn(...lastArgs); } };
-  return wrapped as T & { flush: () => void };
 }
 
 // ---------- 应用 ----------
@@ -184,22 +175,27 @@ function renderEditor() {
       <input id="title" value="${escapeAttr(d.title)}" placeholder="标题" />
       <input id="slug" value="${escapeAttr(d.slug)}" placeholder="slug" />
       <input id="tags" value="${escapeAttr((d.tags || []).join(","))}" placeholder="标签，逗号分隔" />
+      <input id="description" value="${escapeAttr(d.description || "")}" placeholder="摘要" />
+      <input id="cover" value="${escapeAttr(d.cover || "")}" placeholder="封面 URL（可选）" />
       <textarea id="markdown" placeholder="Markdown 正文…">${escapeHtml(d.markdown)}</textarea>
-      <p class="studio-hint">自动保存（1.5s 防抖）。版本冲突会提示比较后停止覆盖。</p>
+      <p class="studio-hint">自动保存（1.5s 防抖）。版本冲突会双栏比较后由你决定，不静默覆盖。</p>
     </section>`;
   const setSave = (s: string) => (app.querySelector("#save-state")!.textContent = s);
-  const gather = (): Partial<Draft> => ({
+  const gather = (): SaveInput => ({
     title: (app.querySelector("#title") as HTMLInputElement).value,
     slug: (app.querySelector("#slug") as HTMLInputElement).value,
     tags: (app.querySelector("#tags") as HTMLInputElement).value.split(",").map(s => s.trim()).filter(Boolean),
     markdown: (app.querySelector("#markdown") as HTMLTextAreaElement).value,
   });
+  const coverVal = () => (app.querySelector("#cover") as HTMLInputElement).value || null;
+  const descVal = () => (app.querySelector("#description") as HTMLInputElement).value;
 
-  const save = debounce(async () => {
+  // SaveController：保存失败（含 409 冲突）向上抛出，调用方据此中止发布/切换。
+  saveCtl = new SaveController(async () => {
     if (!state.current) return;
     const baseVersion = state.current.version;
     setSave("保存中…");
-    const body = { ...gather(), baseVersion };
+    const body = { ...gather(), description: descVal(), cover: coverVal(), baseVersion };
     try {
       const updated = await api<Draft>(`/drafts/${state.current.id}`, {
         method: "PATCH",
@@ -207,50 +203,95 @@ function renderEditor() {
         body: JSON.stringify(body),
       });
       state.current = updated;
-      state.dirty = false;
       // 已同步：清除该 baseVersion 的本地恢复副本。
       await clearSnapshot(updated.id, baseVersion);
       setSave("已保存 ✓");
     } catch (err: any) {
       if (err.status === 409) {
         setSave("版本冲突 ⚠");
-        const server = err.detail?.serverVersion;
-        // 停止覆盖，展示冲突比较
-        alert(`版本冲突：服务端版本=${server}，本地 baseVersion=${baseVersion}。\n请刷新后基于最新版本再编辑。`);
-        // 拉取服务端最新
-        try {
-          state.current = await api<Draft>(`/drafts/${state.current.id}`);
-          renderEditor();
-        } catch {}
-      } else {
-        setSave("保存失败：" + err.message);
+        // 双栏比较：拉取服务端版本，与本地对照，由用户选择，不静默覆盖。
+        const server = await api<Draft>(`/drafts/${state.current.id}`);
+        await showConflict(server, gather());
+        throw err; // 中止发布链路
       }
+      setSave("保存失败：" + err.message);
+      throw err;
     }
   }, 1500);
 
-  // 输入即暂存到 IndexedDB + 标脏 + 触发防抖
+  // 输入即暂存全字段到 IndexedDB + 触发防抖保存
   const onInput = () => {
-    state.dirty = true;
     setSave("编辑中…");
     const g = gather();
-    saveSnapshot(d.id, d.version, { title: g.title || "", markdown: g.markdown || "" });
-    save();
+    saveSnapshot(d.id, d.version, {
+      slug: g.slug, title: g.title, description: descVal(),
+      tags: g.tags.join(","), cover: coverVal() || "", markdown: g.markdown,
+    });
+    saveCtl!.schedule(g, d.version);
   };
   app.querySelector("#title")!.addEventListener("input", onInput);
   app.querySelector("#slug")!.addEventListener("input", onInput);
   app.querySelector("#tags")!.addEventListener("input", onInput);
+  app.querySelector("#description")!.addEventListener("input", onInput);
+  app.querySelector("#cover")!.addEventListener("input", onInput);
   app.querySelector("#markdown")!.addEventListener("input", onInput);
   // 图片粘贴/上传：插入 /api/v1/blog/assets/:id 预览链接
   app.querySelector("#markdown")!.addEventListener("paste", onPaste);
   app.querySelector("#back")!.addEventListener("click", async () => {
-    save.flush();
+    if (saveCtl) { try { await saveCtl.flush(); } catch { /* 冲突已在 UI 处理 */ } }
     await reloadDrafts();
     state.current = undefined;
+    saveCtl = null;
     render();
   });
   app.querySelector("#publish")!.addEventListener("click", onPublish);
   window.addEventListener("beforeunload", (e) => {
-    if (state.dirty) { e.preventDefault(); }
+    if (saveCtl?.dirty) { e.preventDefault(); }
+  });
+}
+
+// showConflict 展示服务端 vs 本地双栏比较，用户选择覆盖/另存/取消。
+async function showConflict(server: Draft, localInput: SaveInput) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-backdrop";
+  overlay.innerHTML = `
+    <div class="glass-panel modal-card conflict-card">
+      <h3 style="margin-top:0">版本冲突</h3>
+      <p class="studio-hint">服务端版本 v${server.version} 与本地编辑不一致。选择如何处理：</p>
+      <div class="conflict-cols">
+        <div>
+          <div class="studio-hint">服务端</div>
+          <textarea readonly>${escapeHtml(server.markdown)}</textarea>
+        </div>
+        <div>
+          <div class="studio-hint">本地</div>
+          <textarea readonly>${escapeHtml(localInput.markdown)}</textarea>
+        </div>
+      </div>
+      <div class="admin-form-row">
+        <button id="cf-use-server" class="btn-ghost">用服务端版本</button>
+        <button id="cf-keep-local" class="btn-primary">保留本地（基于服务端版本重存）</button>
+        <button id="cf-cancel" class="btn-ghost">取消</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  await new Promise<void>(resolve => {
+    overlay.querySelector("#cf-use-server")!.addEventListener("click", () => {
+      state.current = server; saveCtl = null; renderEditor(); overlay.remove(); resolve();
+    });
+    overlay.querySelector("#cf-keep-local")!.addEventListener("click", async () => {
+      // 把本地内容基于服务端最新版本重新保存（版本推进）
+      try {
+        const updated = await api<Draft>(`/drafts/${server.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...localInput, description: (app.querySelector("#description") as HTMLInputElement)?.value, cover: (app.querySelector("#cover") as HTMLInputElement)?.value || null, baseVersion: server.version }),
+        });
+        state.current = updated; saveCtl = null; renderEditor();
+      } catch (err: any) { alert("重存失败：" + err.message); }
+      overlay.remove(); resolve();
+    });
+    overlay.querySelector("#cf-cancel")!.addEventListener("click", () => { overlay.remove(); resolve(); });
   });
 }
 
@@ -286,6 +327,15 @@ async function uploadImage(file: File, draftId: number): Promise<string | null> 
 async function onPublish() {
   const d = state.current!;
   const action = d.status === "published" ? "unpublish" : "publish";
+  // 发布/撤回前先 flush 自动保存，避免最后 1.5s 编辑未进入提交内容。
+  if (saveCtl) {
+    try {
+      await saveCtl.flush();
+    } catch {
+      alert("有未保存的冲突，已取消发布。请先解决版本冲突。");
+      return;
+    }
+  }
   try {
     const r = await api<{ jobId: number; status: string }>(`/drafts/${d.id}/${action}`, { method: "POST" });
     alert(`已提交${action === "publish" ? "发布" : "撤回"}任务 #${r.jobId}（${r.status}）。等待 GitHub Actions 构建回调。`);

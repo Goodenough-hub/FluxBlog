@@ -2,6 +2,7 @@
  * Studio IndexedDB 恢复副本：防抖保存期间把未同步的编辑写入本地，
  * 页面刷新/崩溃后回到编辑器时若版本仍一致则可恢复。
  * key = (draftId, version)；保存成功后清除。
+ * 备份全字段（slug/标题/描述/标签/封面/正文），避免恢复时丢字段。
  */
 
 const DB_NAME = "fluxblog-studio";
@@ -28,16 +29,29 @@ export function initDB(): Promise<IDBDatabase> {
 export interface Snapshot {
   draftId: number;
   version: number;
+  slug: string;
   title: string;
+  description: string;
+  tags: string;
+  cover: string;
   markdown: string;
   savedAt: number;
 }
 
-export async function saveSnapshot(draftId: number, version: number, data: { title: string; markdown: string }): Promise<void> {
+export interface SnapshotInput {
+  slug: string;
+  title: string;
+  description: string;
+  tags: string;
+  cover: string;
+  markdown: string;
+}
+
+export async function saveSnapshot(draftId: number, version: number, data: SnapshotInput): Promise<void> {
   const db = await initDB();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put({ draftId, version, title: data.title, markdown: data.markdown, savedAt: Date.now() } as Snapshot);
+    tx.objectStore(STORE).put({ draftId, version, ...data, savedAt: Date.now() } as Snapshot);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });

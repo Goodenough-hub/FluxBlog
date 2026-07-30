@@ -31,3 +31,8 @@ public/pagefind
 
 # docker compose
 compose.override.yaml
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
