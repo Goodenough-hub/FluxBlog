@@ -1,20 +1,17 @@
 /**
- * FluxBlog Studio 客户端应用（v1：纯 textarea 编辑器 + 完整发布管线）。
+ * FluxBlog Studio 客户端应用。
  *
- * 覆盖：登录、草稿列表/创建/编辑、1.5s 防抖自动保存、baseVersion 乐观锁
- * （冲突 409 展示服务端版本）、IndexedDB 未同步恢复副本、图片粘贴/上传、
- * 发布/撤回 + job 轮询。Milkdown Crepe 富文本渲染为下一迭代（见页面注释）。
- *
- * 后端：${PUBLIC_BLOG_API}（默认同源 /api/v1/blog）。
+ * 桌面固定双栏：左侧 Milkdown Crepe 编辑、右侧实时预览（Mermaid/KaTeX/Shiki/
+ * 受保护图片 Blob）。移动端在窄屏自动堆叠。切换草稿或退出时销毁编辑器、
+ * 预览与 SaveController。鉴权走 auth（令牌刷新 + 401 重放）；图片走 image-utils
+ * （WebP/EXIF）。自动保存为 SaveController 严格 single-flight + 乐观锁。
  */
-import { initDB, saveSnapshot, loadSnapshot, clearSnapshot } from "./studio-idb";
+import { api } from "./api-client";
+import { isLoggedIn, login, clearSession } from "./auth";
 import { SaveController, type SaveInput } from "./save-controller";
-
-const API = import.meta.env.PUBLIC_BLOG_API || "/api/v1/blog";
-const TOKEN_KEY = "fluxblog_token";
-
-// 当前编辑器的保存控制器（renderEditor 创建）。发布/返回列表前 await flush()。
-let saveCtl: SaveController | null = null;
+import { PreviewRenderer } from "./preview";
+import { MilkdownEditor } from "./milkdown-editor";
+import { initDB, saveSnapshot, loadSnapshot, clearSnapshot } from "./studio-idb";
 
 type Draft = {
   id: number;
@@ -26,48 +23,27 @@ type Draft = {
   markdown: string;
   status: string;
   version: number;
+  publishedVersion?: number | null;
+  hasUnpublishedChanges?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
 
-// ---------- 简易 API ----------
-async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem(TOKEN_KEY) || "";
-  const headers: Record<string, string> = { ...(opts.headers as any) };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API}${path}`, { ...opts, headers });
-  if (res.status === 401) {
-    throw new ApiError(401, "未登录或令牌失效");
-  }
-  if (!res.ok) {
-    let detail: any = null;
-    try { detail = await res.json(); } catch {}
-    throw new ApiError(res.status, detail?.error || `HTTP ${res.status}`, detail);
-  }
-  if (res.status === 204) return undefined as unknown as T;
-  return res.json();
-}
-
-class ApiError extends Error {
-  constructor(public status: number, msg: string, public detail?: any) {
-    super(msg);
-  }
-}
-
-// ---------- 应用 ----------
 const app = document.getElementById("studio-app")!;
 
-let state: { token?: string; drafts: Draft[]; current?: Draft; dirty: boolean } = {
-  drafts: [],
-  dirty: false,
-};
+let state: { drafts: Draft[]; current?: Draft } = { drafts: [] };
+let saveCtl: SaveController | null = null;
+let preview: PreviewRenderer | null = null;
+let editor: MilkdownEditor | null = null;
+let beforeunloadBound = false;
 
 function render() {
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (!token) return renderLogin();
+  if (!isLoggedIn()) return renderLogin();
   if (!state.current) return renderList();
-  renderEditor();
+  void renderEditor();
 }
+
+// ==================== 登录 ====================
 
 function renderLogin() {
   app.innerHTML = `
@@ -80,55 +56,61 @@ function renderLogin() {
       </form>
       <p class="studio-hint">独立博客账号，与 FinFlow/AppPilot 账号隔离。</p>
     </section>`;
-  app.querySelector("#login-form")!.addEventListener("submit", async (e) => {
+  app.querySelector("#login-form")!.addEventListener("submit", async e => {
     e.preventDefault();
-    const f = e.target as HTMLFormElement;
-    const fd = new FormData(f);
-    try {
-      const r = await api<{ token: string }>(`/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: fd.get("username"), password: fd.get("password") }),
-      });
-      localStorage.setItem(TOKEN_KEY, r.token);
-      await reloadDrafts();
-      render();
-    } catch (err: any) {
-      alert(err.message);
+    const fd = new FormData(e.target as HTMLFormElement);
+    const ok = await login(String(fd.get("username")), String(fd.get("password")));
+    if (!ok) {
+      alert("用户名或密码错误");
+      return;
     }
+    await reloadDrafts();
+    render();
   });
 }
+
+// ==================== 列表 ====================
 
 async function reloadDrafts() {
   try {
     state.drafts = await api<Draft[]>(`/drafts`);
-  } catch (err: any) {
-    if (err.status === 401) localStorage.removeItem(TOKEN_KEY);
+  } catch {
     state.drafts = [];
   }
 }
 
 function renderList() {
-  const rows = state.drafts.map(d => `
-    <tr data-id="${d.id}">
-      <td>${escapeHtml(d.title || d.slug)}</td>
-      <td><span class="status status-${d.status}">${d.status}</span></td>
-      <td>v${d.version}</td>
-      <td>${escapeHtml(d.updatedAt || "")}</td>
-    </tr>`).join("");
+  const rows = state.drafts
+    .map(
+      d => `<tr data-id="${d.id}">
+        <td>${escapeHtml(d.title || d.slug)}</td>
+        <td><span class="status status-${d.status}">${d.status}</span>${d.hasUnpublishedChanges ? '<span class="badge-dot" title="有未发布修改">●</span>' : ""}</td>
+        <td>v${d.version}${d.publishedVersion != null ? `/已发v${d.publishedVersion}` : ""}</td>
+        <td>${escapeHtml(d.updatedAt || "")}</td>
+      </tr>`,
+    )
+    .join("");
   app.innerHTML = `
     <section class="studio-list">
-      <h1>草稿</h1>
+      <div class="studio-toolbar">
+        <h1 style="margin:0">草稿</h1>
+        <button id="logout" class="btn-ghost">退出登录</button>
+      </div>
       <form id="new-form" class="studio-row">
         <input name="slug" placeholder="slug（小写字母数字连字符）" required pattern="[a-z0-9]+(-[a-z0-9]+)*" />
         <input name="title" placeholder="标题" required />
-        <button type="submit">新建</button>
+        <button type="submit" class="btn-primary">新建</button>
       </form>
       <table><thead><tr><th>标题</th><th>状态</th><th>版本</th><th>更新</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="4" class="empty">暂无草稿</td></tr>'}</tbody></table>
-      <p class="studio-hint">编辑器 v1：纯文本。Milkdown Crepe 富文本渲染为下一迭代。</p>
     </section>`;
-  app.querySelector("#new-form")!.addEventListener("submit", async (e) => {
+  app.querySelector("#logout")!.addEventListener("click", () => {
+    clearSession();
+    state.drafts = [];
+    state.current = undefined;
+    render();
+  });
+  app.querySelector("#new-form")!.addEventListener("submit", async e => {
     e.preventDefault();
     const fd = new FormData(e.target as HTMLFormElement);
     try {
@@ -137,21 +119,28 @@ function renderList() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug: fd.get("slug"), title: fd.get("title"), markdown: "" }),
       });
-      state.current = d; render();
-    } catch (err: any) { alert(err.message); }
+      state.current = d;
+      render();
+    } catch (err: any) {
+      alert(err.message);
+    }
   });
   app.querySelectorAll("tr[data-id]").forEach(tr => {
     tr.addEventListener("click", async () => {
       const id = Number((tr as HTMLElement).dataset.id);
       const d = state.drafts.find(x => x.id === id);
-      if (d) { state.current = d; await recoverOrRender(); }
+      if (d) {
+        state.current = d;
+        await recoverOrRender();
+      }
     });
   });
 }
 
+// ==================== 编辑器 ====================
+
 async function recoverOrRender() {
   const d = state.current!;
-  // IndexedDB 恢复：若有未同步副本且版本相同，提示恢复全部字段。
   const snap = await loadSnapshot(d.id, d.version);
   if (snap && snap.markdown !== d.markdown) {
     if (confirm("检测到未同步的本地草稿副本，是否恢复？")) {
@@ -163,177 +152,211 @@ async function recoverOrRender() {
       d.cover = snap.cover || d.cover;
     }
   }
-  renderEditor();
+  await renderEditor();
 }
 
-function renderEditor() {
+async function renderEditor() {
   const d = state.current!;
+  const publishLabel =
+    d.status === "published"
+      ? d.hasUnpublishedChanges
+        ? "更新发布"
+        : "已发布"
+      : "发布";
   app.innerHTML = `
     <section class="studio-editor">
       <div class="studio-toolbar">
-        <button id="back">← 列表</button>
+        <button id="back" class="btn-ghost">← 列表</button>
         <span class="status status-${d.status}">${d.status} · v${d.version}</span>
         <span id="save-state" class="studio-hint"></span>
-        <button id="publish">${d.status === "published" ? "撤回" : "发布"}</button>
+        <span class="spacer"></span>
+        <button id="history" class="btn-ghost">历史</button>
+        <button id="publish" class="btn-primary">${publishLabel}</button>
+        <button id="logout" class="btn-ghost">退出</button>
       </div>
-      <input id="title" value="${escapeAttr(d.title)}" placeholder="标题" />
-      <input id="slug" value="${escapeAttr(d.slug)}" placeholder="slug" />
-      <input id="tags" value="${escapeAttr((d.tags || []).join(","))}" placeholder="标签，逗号分隔" />
-      <input id="description" value="${escapeAttr(d.description || "")}" placeholder="摘要" />
-      <input id="cover" value="${escapeAttr(d.cover || "")}" placeholder="封面 URL（可选）" />
-      <textarea id="markdown" placeholder="Markdown 正文…">${escapeHtml(d.markdown)}</textarea>
-      <p class="studio-hint">自动保存（1.5s 防抖）。版本冲突会双栏比较后由你决定，不静默覆盖。</p>
+      <div class="studio-meta">
+        <input id="title" value="${escapeAttr(d.title)}" placeholder="标题" />
+        <input id="slug" value="${escapeAttr(d.slug)}" placeholder="slug" />
+        <input id="tags" value="${escapeAttr((d.tags || []).join(","))}" placeholder="标签，逗号分隔" />
+        <input id="description" value="${escapeAttr(d.description || "")}" placeholder="摘要" />
+        <input id="cover" value="${escapeAttr(d.cover || "")}" placeholder="封面 URL（可选）" />
+      </div>
+      <div class="studio-dual">
+        <div class="studio-pane"><div class="pane-label">编辑</div><div id="editor" class="editor-root"></div></div>
+        <div class="studio-pane"><div class="pane-label">预览</div><div id="preview" class="preview-root prose-app"></div></div>
+      </div>
+      <p class="studio-hint">自动保存（1.5s 防抖，single-flight）。版本冲突会双栏比较后由你决定。线上站点需单独手动部署。</p>
     </section>`;
   const setSave = (s: string) => (app.querySelector("#save-state")!.textContent = s);
-  const gather = (): SaveInput => ({
-    title: (app.querySelector("#title") as HTMLInputElement).value,
-    slug: (app.querySelector("#slug") as HTMLInputElement).value,
-    tags: (app.querySelector("#tags") as HTMLInputElement).value.split(",").map(s => s.trim()).filter(Boolean),
-    description: (app.querySelector("#description") as HTMLInputElement).value,
-    cover: (app.querySelector("#cover") as HTMLInputElement).value,
-    markdown: (app.querySelector("#markdown") as HTMLTextAreaElement).value,
-  });
-  const coverVal = () => (app.querySelector("#cover") as HTMLInputElement).value;
-  const descVal = () => (app.querySelector("#description") as HTMLInputElement).value;
 
-  // SaveController：single-flight；保存回调使用捕获的 input/baseVersion，不重读 DOM。
-  // 冲突 → 进入 blocked（onBlocked 已在 catch 内处理 UI），flush 据此中止发布/切换。
+  preview = new PreviewRenderer(app.querySelector("#preview") as HTMLElement);
+  preview.schedule(d.markdown);
+
+  editor = new MilkdownEditor({
+    root: app.querySelector("#editor") as HTMLElement,
+    defaultValue: d.markdown,
+    draftId: d.id,
+    onChange: md => {
+      preview?.schedule(md);
+      gatherAndSchedule(md);
+    },
+  });
+  await editor.create();
+
+  const val = (sel: string) => (app.querySelector(sel) as HTMLInputElement).value;
+  const gather = (markdown: string): SaveInput => ({
+    title: val("#title"),
+    slug: val("#slug"),
+    tags: val("#tags").split(",").map(s => s.trim()).filter(Boolean),
+    description: val("#description"),
+    cover: val("#cover"),
+    markdown,
+  });
+  const gatherAndSchedule = (md: string) => {
+    const g = gather(md);
+    setSave("编辑中…");
+    saveSnapshot(d.id, d.version, {
+      slug: g.slug, title: g.title, description: g.description,
+      tags: g.tags.join(","), cover: g.cover, markdown: g.markdown,
+    });
+    saveCtl?.schedule(g, d.version);
+  };
+
   saveCtl = new SaveController(async (input: SaveInput, baseVersion: number) => {
     if (!state.current) return;
     setSave("保存中…");
-    const body = { ...input, baseVersion };
     try {
       const updated = await api<Draft>(`/drafts/${state.current.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...input, baseVersion }),
       });
       state.current = updated;
-      // 已同步：清除该 baseVersion 的本地恢复副本。
       await clearSnapshot(updated.id, baseVersion);
       setSave("已保存 ✓");
     } catch (err: any) {
       if (err.status === 409) {
         setSave("版本冲突 ⚠");
-        // 双栏比较：拉取服务端版本，与本地对照，由用户选择，不静默覆盖。
         const server = await api<Draft>(`/drafts/${state.current.id}`);
         await showConflict(server, input);
       } else {
         setSave("保存失败：" + err.message);
       }
-      throw err; // 进入 blocked，中止发布/切换
+      throw err;
     }
   }, 1500);
 
-  // 输入即暂存全字段到 IndexedDB + 触发防抖保存
-  const onInput = () => {
-    setSave("编辑中…");
-    const g = gather();
-    saveSnapshot(d.id, d.version, {
-      slug: g.slug, title: g.title, description: descVal(),
-      tags: g.tags.join(","), cover: coverVal() || "", markdown: g.markdown,
-    });
-    saveCtl!.schedule(g, d.version);
-  };
-  app.querySelector("#title")!.addEventListener("input", onInput);
-  app.querySelector("#slug")!.addEventListener("input", onInput);
-  app.querySelector("#tags")!.addEventListener("input", onInput);
-  app.querySelector("#description")!.addEventListener("input", onInput);
-  app.querySelector("#cover")!.addEventListener("input", onInput);
-  app.querySelector("#markdown")!.addEventListener("input", onInput);
-  // 图片粘贴/上传：插入 /api/v1/blog/assets/:id 预览链接
-  app.querySelector("#markdown")!.addEventListener("paste", onPaste);
+  ["#title", "#slug", "#tags", "#description", "#cover"].forEach(sel =>
+    app.querySelector(sel)!.addEventListener("input", () => gatherAndSchedule(editor?.getMarkdown() ?? "")),
+  );
+
   app.querySelector("#back")!.addEventListener("click", async () => {
-    if (saveCtl) { try { await saveCtl.flush(); } catch { /* 冲突已在 UI 处理 */ } }
+    await teardown();
     await reloadDrafts();
     state.current = undefined;
-    saveCtl = null;
     render();
   });
   app.querySelector("#publish")!.addEventListener("click", onPublish);
-  window.addEventListener("beforeunload", (e) => {
-    if (saveCtl?.dirty) { e.preventDefault(); }
+  app.querySelector("#history")!.addEventListener("click", onHistory);
+  app.querySelector("#logout")!.addEventListener("click", async () => {
+    await teardown();
+    clearSession();
+    state.current = undefined;
+    render();
   });
+  if (!beforeunloadBound) {
+    beforeunloadBound = true;
+    window.addEventListener("beforeunload", e => {
+      if (saveCtl?.dirty) e.preventDefault();
+    });
+  }
 }
 
-// showConflict 展示服务端 vs 本地双栏比较，用户选择覆盖/另存/取消。
-async function showConflict(server: Draft, localInput: SaveInput) {
+async function teardown() {
+  if (saveCtl) {
+    try {
+      await saveCtl.flush();
+    } catch {
+      /* 冲突已在 UI 处理 */
+    }
+    saveCtl.destroy();
+    saveCtl = null;
+  }
+  if (editor) {
+    await editor.destroy();
+    editor = null;
+  }
+  if (preview) {
+    preview.destroy();
+    preview = null;
+  }
+}
+
+// ==================== 历史 ====================
+
+async function onHistory() {
+  if (!state.current) return;
+  try {
+    const vs = await api<{ id: number; version: number; title: string; markdown: string; createdAt: string }[]>(
+      `/drafts/${state.current.id}/versions`,
+    );
+    showHistoryDrawer(vs);
+  } catch (err: any) {
+    alert("加载历史失败：" + err.message);
+  }
+}
+
+function showHistoryDrawer(vs: { id: number; version: number; title: string; markdown: string; createdAt: string }[]) {
+  const list = vs
+    .map(
+      v => `<div class="history-item" data-version="${v.version}">
+        <div class="history-meta">v${v.version} · ${escapeHtml(v.title)} <span class="muted">${escapeHtml(v.createdAt)}</span></div>
+        <div class="history-summary">${escapeHtml(v.markdown.slice(0, 120))}</div>
+        <div class="history-actions"><button class="btn-ghost" data-restore="${v.version}">恢复</button></div>
+      </div>`,
+    )
+    .join("");
   const overlay = document.createElement("div");
   overlay.className = "modal-backdrop";
-  overlay.innerHTML = `
-    <div class="glass-panel modal-card conflict-card">
-      <h3 style="margin-top:0">版本冲突</h3>
-      <p class="studio-hint">服务端版本 v${server.version} 与本地编辑不一致。选择如何处理：</p>
-      <div class="conflict-cols">
-        <div>
-          <div class="studio-hint">服务端</div>
-          <textarea readonly>${escapeHtml(server.markdown)}</textarea>
-        </div>
-        <div>
-          <div class="studio-hint">本地</div>
-          <textarea readonly>${escapeHtml(localInput.markdown)}</textarea>
-        </div>
-      </div>
-      <div class="admin-form-row">
-        <button id="cf-use-server" class="btn-ghost">用服务端版本</button>
-        <button id="cf-keep-local" class="btn-primary">保留本地（基于服务端版本重存）</button>
-        <button id="cf-cancel" class="btn-ghost">取消</button>
-      </div>
-    </div>`;
+  overlay.innerHTML = `<div class="glass-panel modal-card history-card">
+    <h3 style="margin-top:0">历史版本</h3>
+    <div class="history-list">${list || '<p class="muted">暂无检查点</p>'}</div>
+    <button class="btn-ghost" id="hist-close" style="width:100%">关闭</button>
+  </div>`;
   document.body.appendChild(overlay);
-  await new Promise<void>(resolve => {
-    overlay.querySelector("#cf-use-server")!.addEventListener("click", () => {
-      state.current = server; saveCtl = null; renderEditor(); overlay.remove(); resolve();
+  overlay.querySelector("#hist-close")!.addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", e => {
+    if (e.target === overlay) overlay.remove();
+  });
+  overlay.querySelectorAll("[data-restore]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const version = Number((btn as HTMLElement).dataset.restore);
+      overlay.remove();
+      await restoreVersion(version);
     });
-    overlay.querySelector("#cf-keep-local")!.addEventListener("click", async () => {
-      // 把本地内容基于服务端最新版本重新保存（版本推进）
-      try {
-        const updated = await api<Draft>(`/drafts/${server.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...localInput, baseVersion: server.version }),
-        });
-        state.current = updated; saveCtl = null; renderEditor();
-      } catch (err: any) { alert("重存失败：" + err.message); }
-      overlay.remove(); resolve();
-    });
-    overlay.querySelector("#cf-cancel")!.addEventListener("click", () => { overlay.remove(); resolve(); });
   });
 }
 
-async function onPaste(e: Event) {
-  const ce = e as ClipboardEvent;
-  const files = Array.from(ce.clipboardData?.files || []).filter(f => f.type.startsWith("image/"));
-  if (!files.length) return;
-  e.preventDefault();
-  const ta = e.target as HTMLTextAreaElement;
-  for (const f of files) {
-    const url = await uploadImage(f, state.current!.id);
-    if (!url) continue;
-    const insert = `\n![${f.name}](${url})\n`;
-    const start = ta.selectionStart, end = ta.selectionEnd;
-    ta.value = ta.value.slice(0, start) + insert + ta.value.slice(end);
-    ta.dispatchEvent(new Event("input"));
+async function restoreVersion(version: number) {
+  if (!state.current) return;
+  if (!confirm(`恢复到 v${version}？当前未保存内容会先 flush，恢复结果作为新版本（不覆盖历史）。`)) return;
+  try {
+    await teardown();
+    const d = await api<Draft>(`/drafts/${state.current.id}/versions/${version}/restore`, { method: "POST" });
+    state.current = d;
+    await renderEditor();
+  } catch (err: any) {
+    alert("恢复失败：" + err.message);
+    await renderEditor();
   }
 }
 
-async function uploadImage(file: File, draftId: number): Promise<string | null> {
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("draftId", String(draftId));
-  try {
-    const r = await api<{ previewUrl: string }>(`/assets`, { method: "POST", body: fd });
-    return r.previewUrl;
-  } catch (err: any) {
-    alert("图片上传失败：" + err.message);
-    return null;
-  }
-}
+// ==================== 发布 ====================
 
 async function onPublish() {
   const d = state.current!;
   const action = d.status === "published" ? "unpublish" : "publish";
-  // 发布/撤回前先 flush 自动保存，避免最后 1.5s 编辑未进入提交内容。
+  // 发布/撤回前先 flush 自动保存。
   if (saveCtl) {
     try {
       await saveCtl.flush();
@@ -343,18 +366,17 @@ async function onPublish() {
     }
   }
   try {
-    const r = await api<{ jobId: number; status: string }>(`/drafts/${d.id}/${action}`, { method: "POST" });
-    if (r.status === "succeeded") {
+    const r = await api<{ jobId: number | null; status: string; noop?: boolean }>(`/drafts/${d.id}/${action}`, {
+      method: "POST",
+    });
+    if (r.noop || r.status === "succeeded") {
       state.current = await api<Draft>(`/drafts/${state.current!.id}`);
-      renderEditor();
-      alert(
-        `${action === "publish" ? "发布" : "撤回"}成功。内容已提交 Git 仓库；线上站点需单独手动部署。`,
-      );
+      await renderEditor();
+      alert(`${action === "publish" ? "发布" : "撤回"}成功。内容已提交 Git 仓库；线上站点需单独手动部署。`);
       return;
     }
-    alert(`已提交${action === "publish" ? "发布" : "撤回"}任务 #${r.jobId}（${r.status}）。`);
-    // 兼容服务中断后遗留的 queued/building job。
-    pollJob(r.jobId);
+    alert(`已提交${action === "publish" ? "发布" : "撤回"}任务（${r.status}）。`);
+    pollJob(r.jobId as number);
   } catch (err: any) {
     alert(err.message);
   }
@@ -366,16 +388,70 @@ async function pollJob(jobId: number) {
     try {
       const job = await api<{ status: string }>(`/publish-jobs/${jobId}`);
       if (job.status === "succeeded" || job.status === "failed") {
-        state.current = await api<Draft>(`/drafts/${state.current!.id}`);
-        renderEditor();
+        if (state.current) state.current = await api<Draft>(`/drafts/${state.current.id}`);
+        await renderEditor();
         alert(`任务 #${jobId} ${job.status}`);
         return;
       }
-    } catch { /* retry */ }
+    } catch {
+      /* retry */
+    }
   }
 }
 
-// ---------- 工具 ----------
+// ==================== 冲突 ====================
+
+async function showConflict(server: Draft, localInput: SaveInput) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-backdrop";
+  overlay.innerHTML = `
+    <div class="glass-panel modal-card conflict-card">
+      <h3 style="margin-top:0">版本冲突</h3>
+      <p class="studio-hint">服务端版本 v${server.version} 与本地编辑不一致。选择如何处理：</p>
+      <div class="conflict-cols">
+        <div><div class="studio-hint">服务端</div><textarea readonly>${escapeHtml(server.markdown)}</textarea></div>
+        <div><div class="studio-hint">本地</div><textarea readonly>${escapeHtml(localInput.markdown)}</textarea></div>
+      </div>
+      <div class="admin-form-row">
+        <button id="cf-use-server" class="btn-ghost">用服务端版本</button>
+        <button id="cf-keep-local" class="btn-primary">保留本地（基于服务端版本重存）</button>
+        <button id="cf-cancel" class="btn-ghost">取消</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  await new Promise<void>(resolve => {
+    overlay.querySelector("#cf-use-server")!.addEventListener("click", async () => {
+      await teardown();
+      state.current = server;
+      await renderEditor();
+      overlay.remove();
+      resolve();
+    });
+    overlay.querySelector("#cf-keep-local")!.addEventListener("click", async () => {
+      try {
+        const updated = await api<Draft>(`/drafts/${server.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...localInput, baseVersion: server.version }),
+        });
+        await teardown();
+        state.current = updated;
+        await renderEditor();
+      } catch (err: any) {
+        alert("重存失败：" + err.message);
+      }
+      overlay.remove();
+      resolve();
+    });
+    overlay.querySelector("#cf-cancel")!.addEventListener("click", () => {
+      overlay.remove();
+      resolve();
+    });
+  });
+}
+
+// ==================== 工具 ====================
+
 function escapeHtml(s: string) {
   return s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!));
 }
@@ -383,9 +459,10 @@ function escapeAttr(s: string) {
   return escapeHtml(s).replace(/"/g, "&quot;");
 }
 
-// ---------- 启动 ----------
+// ==================== 启动 ====================
+
 (async function main() {
   await initDB();
-  if (localStorage.getItem(TOKEN_KEY)) await reloadDrafts();
+  if (isLoggedIn()) await reloadDrafts();
   render();
 })();
