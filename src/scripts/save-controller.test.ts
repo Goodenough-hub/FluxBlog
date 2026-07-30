@@ -2,7 +2,12 @@ import { describe, it, expect, vi } from "vitest";
 import { SaveController, type SaveInput } from "./save-controller";
 
 const input = (md: string): SaveInput => ({
-  title: "T", slug: "s", tags: ["a"], description: "D", cover: "", markdown: md,
+  title: "T",
+  slug: "s",
+  tags: ["a"],
+  description: "D",
+  cover: "",
+  markdown: md,
 });
 
 describe("SaveController single-flight", () => {
@@ -20,19 +25,28 @@ describe("SaveController single-flight", () => {
     let calls = 0;
     const save = vi.fn(() => {
       calls++;
-      if (calls === 1) return new Promise<void>(r => { resolveFirst = r; });
+      if (calls === 1)
+        return new Promise<void>(r => {
+          resolveFirst = r;
+        });
       return Promise.resolve();
     });
     const c = new SaveController(save, 1500);
-    c.schedule(input("v1"), 1);          // 触发 pump（计时器）
-    const p = c.flush();                 // 进入在途：保存 v1（慢）
+    c.schedule(input("v1"), 1); // 触发 pump（计时器）
+    const p = c.flush(); // 进入在途：保存 v1（慢）
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ markdown: "v1" }), 1);
-    c.schedule(input("v2"), 1);          // 在途期间又来新输入
-    resolveFirst();                       // v1 完成 → flush 循环保存 v2（快）
+    expect(save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ markdown: "v1" }),
+      1
+    );
+    c.schedule(input("v2"), 1); // 在途期间又来新输入
+    resolveFirst(); // v1 完成 → flush 循环保存 v2（快）
     await p;
     expect(save).toHaveBeenCalledTimes(2);
-    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ markdown: "v2" }), 1);
+    expect(save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ markdown: "v2" }),
+      1
+    );
     expect(c.dirty).toBe(false);
   });
 
@@ -44,7 +58,10 @@ describe("SaveController single-flight", () => {
     c.schedule(input("v3"), 1);
     await c.flush();
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenCalledWith(expect.objectContaining({ markdown: "v3" }), 1);
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({ markdown: "v3" }),
+      1
+    );
   });
 
   it("无 pending 时 flush 直接 resolve（不调用 save）", async () => {

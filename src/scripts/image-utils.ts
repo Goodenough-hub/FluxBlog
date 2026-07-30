@@ -3,7 +3,7 @@
  * Canvas 重编码同时移除 EXIF（createImageBitmap imageOrientation 应用方向）；
  * GIF 保持原格式；SVG 拒绝。原文件 ≤25MiB，转换结果 ≤8MiB（后端上限）。
  */
-const MAX_RAW = 25 * 1024 * 1024;
+export const MAX_RAW = 25 * 1024 * 1024;
 const MAX_EDGE = 2560;
 const QUALITY = 0.82;
 
@@ -17,7 +17,7 @@ export function isAcceptedImage(file: File): boolean {
   return /image\/(jpeg|png|webp|gif)/.test(file.type);
 }
 
-function fitToEdge(w: number, h: number): { w: number; h: number } {
+export function fitToEdge(w: number, h: number): { w: number; h: number } {
   const longest = Math.max(w, h);
   if (longest <= MAX_EDGE) return { w, h };
   const scale = MAX_EDGE / longest;
@@ -28,24 +28,32 @@ function baseName(name: string): string {
   return name.replace(/\.[^.]+$/, "") || "image";
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality: number
+): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    canvas.toBlob(b => (b ? resolve(b) : reject(new Error("encode failed"))), type, quality);
+    canvas.toBlob(
+      b => (b ? resolve(b) : reject(new Error("encode failed"))),
+      type,
+      quality
+    );
   });
 }
 
-export async function prepareImage(
-  file: File,
-): Promise<PreparedImage> {
+export async function prepareImage(file: File): Promise<PreparedImage> {
   if (file.size > MAX_RAW) throw new Error("原文件超过 25MiB");
-  if (!isAcceptedImage(file)) throw new Error("仅接受 JPEG/PNG/WebP/GIF，拒绝 SVG");
+  if (!isAcceptedImage(file))
+    throw new Error("仅接受 JPEG/PNG/WebP/GIF，拒绝 SVG");
   // GIF 保持原格式（动图）。
-  if (file.type === "image/gif") return { blob: file, mime: "image/gif", filename: file.name };
+  if (file.type === "image/gif")
+    return { blob: file, mime: "image/gif", filename: file.name };
 
   // imageOrientation: "from-image" 应用 EXIF 方向；bitmap 无 EXIF，后续 canvas/WebP 也不含。
-  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" }).catch(
-    () => null,
-  );
+  const bitmap = await createImageBitmap(file, {
+    imageOrientation: "from-image",
+  }).catch(() => null);
   let canvas: HTMLCanvasElement;
   if (bitmap) {
     const { w, h } = fitToEdge(bitmap.width, bitmap.height);
@@ -69,7 +77,8 @@ export async function prepareImage(
     }
   }
   const blob = await canvasToBlob(canvas, "image/webp", QUALITY);
-  if (blob.size > 8 * 1024 * 1024) throw new Error("转换后超过 8MiB，请缩小或压缩");
+  if (blob.size > 8 * 1024 * 1024)
+    throw new Error("转换后超过 8MiB，请缩小或压缩");
   return { blob, mime: "image/webp", filename: baseName(file.name) + ".webp" };
 }
 
@@ -86,7 +95,7 @@ function loadImg(url: string): Promise<HTMLImageElement> {
 export async function uploadImage(
   prepared: PreparedImage,
   draftId: number,
-  onProgress?: (ratio: number) => void,
+  onProgress?: (ratio: number) => void
 ): Promise<string> {
   const fd = new FormData();
   fd.append("file", prepared.blob, prepared.filename);
@@ -111,7 +120,7 @@ function uploadOnce(
   url: string,
   token: string,
   fd: FormData,
-  onProgress?: (r: number) => void,
+  onProgress?: (r: number) => void
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -121,7 +130,9 @@ function uploadOnce(
       if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
     };
     xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300 ? resolve(xhr.responseText) : reject(new Error(`上传 ${xhr.status}`));
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve(xhr.responseText)
+        : reject(new Error(`上传 ${xhr.status}`));
     xhr.onerror = () => reject(new Error("网络错误"));
     xhr.send(fd);
   });

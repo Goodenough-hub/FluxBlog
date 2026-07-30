@@ -11,7 +11,13 @@ import { isLoggedIn, login, clearSession } from "./auth";
 import { SaveController, type SaveInput } from "./save-controller";
 import { PreviewRenderer } from "./preview";
 import { MilkdownEditor } from "./milkdown-editor";
-import { initDB, saveSnapshot, loadSnapshot, clearSnapshot } from "./studio-idb";
+import { publishLabel } from "./publish-button";
+import {
+  initDB,
+  saveSnapshot,
+  loadSnapshot,
+  clearSnapshot,
+} from "./studio-idb";
 
 type Draft = {
   id: number;
@@ -59,7 +65,10 @@ function renderLogin() {
   app.querySelector("#login-form")!.addEventListener("submit", async e => {
     e.preventDefault();
     const fd = new FormData(e.target as HTMLFormElement);
-    const ok = await login(String(fd.get("username")), String(fd.get("password")));
+    const ok = await login(
+      String(fd.get("username")),
+      String(fd.get("password"))
+    );
     if (!ok) {
       alert("用户名或密码错误");
       return;
@@ -87,7 +96,7 @@ function renderList() {
         <td><span class="status status-${d.status}">${d.status}</span>${d.hasUnpublishedChanges ? '<span class="badge-dot" title="有未发布修改">●</span>' : ""}</td>
         <td>v${d.version}${d.publishedVersion != null ? `/已发v${d.publishedVersion}` : ""}</td>
         <td>${escapeHtml(d.updatedAt || "")}</td>
-      </tr>`,
+      </tr>`
     )
     .join("");
   app.innerHTML = `
@@ -117,7 +126,11 @@ function renderList() {
       const d = await api<Draft>(`/drafts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug: fd.get("slug"), title: fd.get("title"), markdown: "" }),
+        body: JSON.stringify({
+          slug: fd.get("slug"),
+          title: fd.get("title"),
+          markdown: "",
+        }),
       });
       state.current = d;
       render();
@@ -148,7 +161,12 @@ async function recoverOrRender() {
       d.title = snap.title ?? d.title;
       d.slug = snap.slug || d.slug;
       d.description = snap.description ?? d.description;
-      d.tags = snap.tags ? snap.tags.split(",").map(s => s.trim()).filter(Boolean) : d.tags;
+      d.tags = snap.tags
+        ? snap.tags
+            .split(",")
+            .map(s => s.trim())
+            .filter(Boolean)
+        : d.tags;
       d.cover = snap.cover || d.cover;
     }
   }
@@ -157,12 +175,7 @@ async function recoverOrRender() {
 
 async function renderEditor() {
   const d = state.current!;
-  const publishLabel =
-    d.status === "published"
-      ? d.hasUnpublishedChanges
-        ? "更新发布"
-        : "已发布"
-      : "发布";
+  const publishLabel2 = publishLabel(d);
   app.innerHTML = `
     <section class="studio-editor">
       <div class="studio-toolbar">
@@ -171,7 +184,7 @@ async function renderEditor() {
         <span id="save-state" class="studio-hint"></span>
         <span class="spacer"></span>
         <button id="history" class="btn-ghost">历史</button>
-        <button id="publish" class="btn-primary">${publishLabel}</button>
+        <button id="publish" class="btn-primary">${publishLabel2}</button>
         <button id="logout" class="btn-ghost">退出</button>
       </div>
       <div class="studio-meta">
@@ -187,7 +200,8 @@ async function renderEditor() {
       </div>
       <p class="studio-hint">自动保存（1.5s 防抖，single-flight）。版本冲突会双栏比较后由你决定。线上站点需单独手动部署。</p>
     </section>`;
-  const setSave = (s: string) => (app.querySelector("#save-state")!.textContent = s);
+  const setSave = (s: string) =>
+    (app.querySelector("#save-state")!.textContent = s);
 
   preview = new PreviewRenderer(app.querySelector("#preview") as HTMLElement);
   preview.schedule(d.markdown);
@@ -203,11 +217,15 @@ async function renderEditor() {
   });
   await editor.create();
 
-  const val = (sel: string) => (app.querySelector(sel) as HTMLInputElement).value;
+  const val = (sel: string) =>
+    (app.querySelector(sel) as HTMLInputElement).value;
   const gather = (markdown: string): SaveInput => ({
     title: val("#title"),
     slug: val("#slug"),
-    tags: val("#tags").split(",").map(s => s.trim()).filter(Boolean),
+    tags: val("#tags")
+      .split(",")
+      .map(s => s.trim())
+      .filter(Boolean),
     description: val("#description"),
     cover: val("#cover"),
     markdown,
@@ -216,38 +234,49 @@ async function renderEditor() {
     const g = gather(md);
     setSave("编辑中…");
     saveSnapshot(d.id, d.version, {
-      slug: g.slug, title: g.title, description: g.description,
-      tags: g.tags.join(","), cover: g.cover, markdown: g.markdown,
+      slug: g.slug,
+      title: g.title,
+      description: g.description,
+      tags: g.tags.join(","),
+      cover: g.cover,
+      markdown: g.markdown,
     });
     saveCtl?.schedule(g, d.version);
   };
 
-  saveCtl = new SaveController(async (input: SaveInput, baseVersion: number) => {
-    if (!state.current) return;
-    setSave("保存中…");
-    try {
-      const updated = await api<Draft>(`/drafts/${state.current.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...input, baseVersion }),
-      });
-      state.current = updated;
-      await clearSnapshot(updated.id, baseVersion);
-      setSave("已保存 ✓");
-    } catch (err: any) {
-      if (err.status === 409) {
-        setSave("版本冲突 ⚠");
-        const server = await api<Draft>(`/drafts/${state.current.id}`);
-        await showConflict(server, input);
-      } else {
-        setSave("保存失败：" + err.message);
+  saveCtl = new SaveController(
+    async (input: SaveInput, baseVersion: number) => {
+      if (!state.current) return;
+      setSave("保存中…");
+      try {
+        const updated = await api<Draft>(`/drafts/${state.current.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...input, baseVersion }),
+        });
+        state.current = updated;
+        await clearSnapshot(updated.id, baseVersion);
+        setSave("已保存 ✓");
+      } catch (err: any) {
+        if (err.status === 409) {
+          setSave("版本冲突 ⚠");
+          const server = await api<Draft>(`/drafts/${state.current.id}`);
+          await showConflict(server, input);
+        } else {
+          setSave("保存失败：" + err.message);
+        }
+        throw err;
       }
-      throw err;
-    }
-  }, 1500);
+    },
+    1500
+  );
 
   ["#title", "#slug", "#tags", "#description", "#cover"].forEach(sel =>
-    app.querySelector(sel)!.addEventListener("input", () => gatherAndSchedule(editor?.getMarkdown() ?? "")),
+    app
+      .querySelector(sel)!
+      .addEventListener("input", () =>
+        gatherAndSchedule(editor?.getMarkdown() ?? "")
+      )
   );
 
   app.querySelector("#back")!.addEventListener("click", async () => {
@@ -297,23 +326,37 @@ async function teardown() {
 async function onHistory() {
   if (!state.current) return;
   try {
-    const vs = await api<{ id: number; version: number; title: string; markdown: string; createdAt: string }[]>(
-      `/drafts/${state.current.id}/versions`,
-    );
+    const vs = await api<
+      {
+        id: number;
+        version: number;
+        title: string;
+        markdown: string;
+        createdAt: string;
+      }[]
+    >(`/drafts/${state.current.id}/versions`);
     showHistoryDrawer(vs);
   } catch (err: any) {
     alert("加载历史失败：" + err.message);
   }
 }
 
-function showHistoryDrawer(vs: { id: number; version: number; title: string; markdown: string; createdAt: string }[]) {
+function showHistoryDrawer(
+  vs: {
+    id: number;
+    version: number;
+    title: string;
+    markdown: string;
+    createdAt: string;
+  }[]
+) {
   const list = vs
     .map(
       v => `<div class="history-item" data-version="${v.version}">
         <div class="history-meta">v${v.version} · ${escapeHtml(v.title)} <span class="muted">${escapeHtml(v.createdAt)}</span></div>
         <div class="history-summary">${escapeHtml(v.markdown.slice(0, 120))}</div>
         <div class="history-actions"><button class="btn-ghost" data-restore="${v.version}">恢复</button></div>
-      </div>`,
+      </div>`
     )
     .join("");
   const overlay = document.createElement("div");
@@ -324,7 +367,9 @@ function showHistoryDrawer(vs: { id: number; version: number; title: string; mar
     <button class="btn-ghost" id="hist-close" style="width:100%">关闭</button>
   </div>`;
   document.body.appendChild(overlay);
-  overlay.querySelector("#hist-close")!.addEventListener("click", () => overlay.remove());
+  overlay
+    .querySelector("#hist-close")!
+    .addEventListener("click", () => overlay.remove());
   overlay.addEventListener("click", e => {
     if (e.target === overlay) overlay.remove();
   });
@@ -339,10 +384,18 @@ function showHistoryDrawer(vs: { id: number; version: number; title: string; mar
 
 async function restoreVersion(version: number) {
   if (!state.current) return;
-  if (!confirm(`恢复到 v${version}？当前未保存内容会先 flush，恢复结果作为新版本（不覆盖历史）。`)) return;
+  if (
+    !confirm(
+      `恢复到 v${version}？当前未保存内容会先 flush，恢复结果作为新版本（不覆盖历史）。`
+    )
+  )
+    return;
   try {
     await teardown();
-    const d = await api<Draft>(`/drafts/${state.current.id}/versions/${version}/restore`, { method: "POST" });
+    const d = await api<Draft>(
+      `/drafts/${state.current.id}/versions/${version}/restore`,
+      { method: "POST" }
+    );
     state.current = d;
     await renderEditor();
   } catch (err: any) {
@@ -366,16 +419,24 @@ async function onPublish() {
     }
   }
   try {
-    const r = await api<{ jobId: number | null; status: string; noop?: boolean }>(`/drafts/${d.id}/${action}`, {
+    const r = await api<{
+      jobId: number | null;
+      status: string;
+      noop?: boolean;
+    }>(`/drafts/${d.id}/${action}`, {
       method: "POST",
     });
     if (r.noop || r.status === "succeeded") {
       state.current = await api<Draft>(`/drafts/${state.current!.id}`);
       await renderEditor();
-      alert(`${action === "publish" ? "发布" : "撤回"}成功。内容已提交 Git 仓库；线上站点需单独手动部署。`);
+      alert(
+        `${action === "publish" ? "发布" : "撤回"}成功。内容已提交 Git 仓库；线上站点需单独手动部署。`
+      );
       return;
     }
-    alert(`已提交${action === "publish" ? "发布" : "撤回"}任务（${r.status}）。`);
+    alert(
+      `已提交${action === "publish" ? "发布" : "撤回"}任务（${r.status}）。`
+    );
     pollJob(r.jobId as number);
   } catch (err: any) {
     alert(err.message);
@@ -388,7 +449,8 @@ async function pollJob(jobId: number) {
     try {
       const job = await api<{ status: string }>(`/publish-jobs/${jobId}`);
       if (job.status === "succeeded" || job.status === "failed") {
-        if (state.current) state.current = await api<Draft>(`/drafts/${state.current.id}`);
+        if (state.current)
+          state.current = await api<Draft>(`/drafts/${state.current.id}`);
         await renderEditor();
         alert(`任务 #${jobId} ${job.status}`);
         return;
@@ -420,29 +482,36 @@ async function showConflict(server: Draft, localInput: SaveInput) {
     </div>`;
   document.body.appendChild(overlay);
   await new Promise<void>(resolve => {
-    overlay.querySelector("#cf-use-server")!.addEventListener("click", async () => {
-      await teardown();
-      state.current = server;
-      await renderEditor();
-      overlay.remove();
-      resolve();
-    });
-    overlay.querySelector("#cf-keep-local")!.addEventListener("click", async () => {
-      try {
-        const updated = await api<Draft>(`/drafts/${server.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...localInput, baseVersion: server.version }),
-        });
+    overlay
+      .querySelector("#cf-use-server")!
+      .addEventListener("click", async () => {
         await teardown();
-        state.current = updated;
+        state.current = server;
         await renderEditor();
-      } catch (err: any) {
-        alert("重存失败：" + err.message);
-      }
-      overlay.remove();
-      resolve();
-    });
+        overlay.remove();
+        resolve();
+      });
+    overlay
+      .querySelector("#cf-keep-local")!
+      .addEventListener("click", async () => {
+        try {
+          const updated = await api<Draft>(`/drafts/${server.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...localInput,
+              baseVersion: server.version,
+            }),
+          });
+          await teardown();
+          state.current = updated;
+          await renderEditor();
+        } catch (err: any) {
+          alert("重存失败：" + err.message);
+        }
+        overlay.remove();
+        resolve();
+      });
     overlay.querySelector("#cf-cancel")!.addEventListener("click", () => {
       overlay.remove();
       resolve();
@@ -453,7 +522,10 @@ async function showConflict(server: Draft, localInput: SaveInput) {
 // ==================== 工具 ====================
 
 function escapeHtml(s: string) {
-  return s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!));
+  return s.replace(
+    /[&<>]/g,
+    c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!
+  );
 }
 function escapeAttr(s: string) {
   return escapeHtml(s).replace(/"/g, "&quot;");

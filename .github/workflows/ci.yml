@@ -12,9 +12,9 @@ on:
 
 jobs:
   build:
-    name: typecheck + test + build
+    name: lint + format + typecheck + test + build + e2e
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,6 +22,11 @@ jobs:
           node-version: "22.12"
           cache: npm
       - run: npm ci
+      # 格式与 lint 作为硬门槛（顺序固定）
+      - name: Format check
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - name: Build

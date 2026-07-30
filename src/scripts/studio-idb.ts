@@ -47,17 +47,29 @@ export interface SnapshotInput {
   markdown: string;
 }
 
-export async function saveSnapshot(draftId: number, version: number, data: SnapshotInput): Promise<void> {
+export async function saveSnapshot(
+  draftId: number,
+  version: number,
+  data: SnapshotInput
+): Promise<void> {
   const db = await initDB();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put({ draftId, version, ...data, savedAt: Date.now() } as Snapshot);
+    tx.objectStore(STORE).put({
+      draftId,
+      version,
+      ...data,
+      savedAt: Date.now(),
+    } as Snapshot);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }
 
-export async function loadSnapshot(draftId: number, version: number): Promise<Snapshot | null> {
+export async function loadSnapshot(
+  draftId: number,
+  version: number
+): Promise<Snapshot | null> {
   const db = await initDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readonly");
@@ -67,7 +79,10 @@ export async function loadSnapshot(draftId: number, version: number): Promise<Sn
   });
 }
 
-export async function clearSnapshot(draftId: number, version: number): Promise<void> {
+export async function clearSnapshot(
+  draftId: number,
+  version: number
+): Promise<void> {
   const db = await initDB();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");

@@ -15,7 +15,10 @@ function blogUrl(path: string): string {
 
 // 发布状态机：draft ⇄ published，中间态 publishing/unpublishing 由 job 驱动；
 // 失败回退到上一个稳定态，不改变线上版本。
-function nextPublishState(state: string, action: "publish" | "unpublish" | "succeed" | "fail"): string {
+function nextPublishState(
+  state: string,
+  action: "publish" | "unpublish" | "succeed" | "fail"
+): string {
   switch (state) {
     case "draft":
       if (action === "publish") return "publishing";

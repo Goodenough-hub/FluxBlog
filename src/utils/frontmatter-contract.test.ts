@@ -47,7 +47,11 @@ function parseFrontmatter(src: string): Record<string, unknown> {
     if (idx < 0) continue;
     const key = line.slice(0, idx).trim();
     let val: unknown = line.slice(idx + 1).trim();
-    try { val = JSON.parse(val as string); } catch { /* 标量保留字符串 */ }
+    try {
+      val = JSON.parse(val as string);
+    } catch {
+      /* 标量保留字符串 */
+    }
     out[key] = val;
   }
   return out;

@@ -71,7 +71,10 @@ export function refresh(): Promise<string | null> {
   return refreshPromise;
 }
 
-export async function login(username: string, password: string): Promise<boolean> {
+export async function login(
+  username: string,
+  password: string
+): Promise<boolean> {
   const r = await fetch(`${BLOG_API}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -138,10 +138,7 @@ const rssHref = getRelativeLocaleUrl(
         for (const node of Array.from(nodes)) {
           const id = "mmd-" + Math.random().toString(36).slice(2, 8);
           try {
-            const { svg } = await mermaid.render(
-              id,
-              node.textContent ?? ""
-            );
+            const { svg } = await mermaid.render(id, node.textContent ?? "");
             node.innerHTML = svg;
           } catch {
             node.classList.add("mermaid-error");

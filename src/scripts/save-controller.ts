@@ -31,7 +31,7 @@ export class SaveController {
   constructor(
     private save: (input: SaveInput, baseVersion: number) => Promise<void>,
     private ms = 1500,
-    private onBlocked?: (err: unknown) => void,
+    private onBlocked?: (err: unknown) => void
   ) {}
 
   /** 有未保存编辑：pending 或在途或 blocked。 */
@@ -57,7 +57,7 @@ export class SaveController {
     this.pending = null;
     this.state = "saving";
     this.inFlight = this.save(input, baseVersion)
-      .catch((err) => {
+      .catch(err => {
         // 冲突/失败：进入 blocked，保留 pending 供解决后重试。
         this.state = "blocked";
         this.pending = { input, baseVersion };

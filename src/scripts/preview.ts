@@ -78,7 +78,25 @@ let highlighterPromise: Promise<any> | null = null;
 async function getHighlighter() {
   if (!highlighterPromise) {
     highlighterPromise = import("shiki").then(({ createHighlighter }) =>
-      createHighlighter({ themes: ["min-light", "night-owl"], langs: ["ts", "js", "tsx", "jsx", "go", "python", "bash", "json", "yaml", "html", "css", "sql", "rust", "java"] }),
+      createHighlighter({
+        themes: ["min-light", "night-owl"],
+        langs: [
+          "ts",
+          "js",
+          "tsx",
+          "jsx",
+          "go",
+          "python",
+          "bash",
+          "json",
+          "yaml",
+          "html",
+          "css",
+          "sql",
+          "rust",
+          "java",
+        ],
+      })
     );
   }
   return highlighterPromise;
@@ -89,7 +107,11 @@ async function getMermaid() {
   if (!mermaidPromise) {
     mermaidPromise = import("mermaid").then(m => {
       const mer = m.default;
-      mer.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default" });
+      mer.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        theme: "default",
+      });
       return mer;
     });
   }
@@ -133,7 +155,10 @@ export class PreviewRenderer {
         for (const el of Array.from(mermaidEls)) {
           const id = "preview-mmd-" + Math.random().toString(36).slice(2, 8);
           try {
-            const { svg } = await mer.render(id, (el as HTMLElement).textContent || "");
+            const { svg } = await mer.render(
+              id,
+              (el as HTMLElement).textContent || ""
+            );
             (el as HTMLElement).innerHTML = svg;
           } catch {
             (el as HTMLElement).classList.add("mermaid-error");
