@@ -5,7 +5,8 @@ import config from "@/config";
 
 export const BLOG_PATH = "src/content/posts";
 
-const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+// slug 全站唯一，允许小写字母、数字、连字符与中文；不以连字符开头/结尾。
+const slugRegex = /^[a-z0-9一-龥]+(?:-[a-z0-9一-龥]+)*$/;
 
 const posts = defineCollection({
   loader: glob({ pattern: "**/[^_]*.{md,mdx}", base: `./${BLOG_PATH}` }),

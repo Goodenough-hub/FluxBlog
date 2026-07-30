@@ -1,6 +1,6 @@
 ---
 title: "Markdown 能力：Mermaid 与 KaTeX"
-slug: "markdown-features"
+slug: "markdown-能力演示"
 publishedAt: 2026-07-29
 description: "验证 FluxBlog 的 Mermaid 图表与 KaTeX 数学公式渲染。"
 tags: ["示例", "Mermaid", "KaTeX"]
@@ -18,8 +18,8 @@ tags: ["示例", "Mermaid", "KaTeX"]
 flowchart LR
     Studio -->|草稿| AppPilot
     AppPilot -->|Git 提交| GitHub
-    GitHub -->|Actions 构建| Server
-    Server -->|HMAC 回调| AppPilot
+    GitHub -->|Actions CI| 构建
+    构建 -->|手动部署| 线上
 ```
 
 ## KaTeX 行内公式

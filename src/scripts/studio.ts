@@ -106,7 +106,7 @@ function renderList() {
         <button id="logout" class="btn-ghost">退出登录</button>
       </div>
       <form id="new-form" class="studio-row">
-        <input name="slug" placeholder="slug（小写字母数字连字符）" required pattern="[a-z0-9]+(-[a-z0-9]+)*" />
+        <input name="slug" placeholder="slug（中文/小写字母/数字/连字符）" required pattern="[a-z0-9一-龥]+(-[a-z0-9一-龥]+)*" />
         <input name="title" placeholder="标题" required />
         <button type="submit" class="btn-primary">新建</button>
       </form>

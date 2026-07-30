@@ -1,6 +1,6 @@
 ---
 title: "欢迎来到 FluxBlog"
-slug: "welcome-to-fluxblog"
+slug: "欢迎来到fluxblog"
 publishedAt: 2026-07-29
 updatedAt: 2026-07-29
 description: "FluxBlog 的第一篇示例文章：普通 Markdown、中文搜索内容与代码高亮。"
