@@ -4,6 +4,8 @@ permissions:
   contents: read
 
 on:
+  push:
+    branches: [main]
   pull_request:
     types: [opened, edited, synchronize, reopened]
   workflow_call:
@@ -23,4 +25,10 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - name: Build
+        env:
+          FLUXBLOG_SITE_URL: ${{ vars.FLUXBLOG_SITE_URL }}
         run: npm run build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: E2E
+        run: npm run test:e2e

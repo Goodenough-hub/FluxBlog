@@ -23,9 +23,16 @@ test("暗色模式切换", async ({ page }) => {
   await page.goto("");
   const html = page.locator("html");
   const before = await html.getAttribute("data-theme");
-  await page.getByRole("button", { name: /theme|主题|dark|light/i }).first().click().catch(() => {});
-  // 切换后 data-theme 应改变（或保持，若无按钮则跳过）
-  const after = await html.getAttribute("data-theme");
-  expect(before).toBeTruthy();
-  expect(after).toBeTruthy();
+  expect(before).toMatch(/^(light|dark)$/);
+
+  // 移动端主题按钮位于折叠菜单中，先打开菜单再点击可见按钮。
+  const menuButton = page.locator("#menu-btn");
+  if (await menuButton.isVisible()) {
+    await menuButton.click();
+  }
+  const themeButton = page.locator("#theme-btn");
+  await expect(themeButton).toBeVisible();
+  await themeButton.click();
+
+  await expect.poll(() => html.getAttribute("data-theme")).not.toBe(before);
 });

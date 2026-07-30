@@ -7,7 +7,7 @@
 - Mermaid（按需客户端渲染）+ KaTeX（构建期输出）+ Shiki 双主题 + Pagefind 中文搜索
 - 写作后台 `/blog/studio/`：草稿 CRUD、乐观锁自动保存、IndexedDB 恢复、图片上传、Git 发布
 
-后端由 AppPilot 提供（独立 blog JWT / 账号 / 表族，与 FinFlow 隔离）。已发布内容以本仓库 `main` 为权威源，发布经 AppPilot → Git Data API 原子提交 → GitHub Actions 构建 → 原子部署 → HMAC 回调。
+后端由 AppPilot 提供（独立 blog JWT / 账号 / 表族，与 FinFlow 隔离）。已发布内容以本仓库 `main` 为权威源，发布经 AppPilot → Git Data API 原子提交；GitHub Actions 只运行 CI，不自动部署。阿里云 `/var/www/fluxblog` 仅在明确要求时手动更新。
 
 ## 命令
 

@@ -37,4 +37,4 @@ def fib(n: int) -> int:
     return a
 ```
 
-发布流程：在 Studio 写作 → AppPilot 草稿库 → GitHub 原子提交 → GitHub Actions 构建 → `/var/www/fluxblog` 原子部署。
+发布流程：在 Studio 写作 → AppPilot 草稿库 → GitHub 原子提交。GitHub Actions 只负责 CI；线上 `/var/www/fluxblog` 在需要时手动部署。

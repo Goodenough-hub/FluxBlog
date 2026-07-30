@@ -151,12 +151,16 @@ function renderList() {
 
 async function recoverOrRender() {
   const d = state.current!;
-  // IndexedDB 恢复：若有未同步副本且版本相同，提示恢复。
+  // IndexedDB 恢复：若有未同步副本且版本相同，提示恢复全部字段。
   const snap = await loadSnapshot(d.id, d.version);
   if (snap && snap.markdown !== d.markdown) {
     if (confirm("检测到未同步的本地草稿副本，是否恢复？")) {
       d.markdown = snap.markdown;
       d.title = snap.title ?? d.title;
+      d.slug = snap.slug || d.slug;
+      d.description = snap.description ?? d.description;
+      d.tags = snap.tags ? snap.tags.split(",").map(s => s.trim()).filter(Boolean) : d.tags;
+      d.cover = snap.cover || d.cover;
     }
   }
   renderEditor();
@@ -185,17 +189,19 @@ function renderEditor() {
     title: (app.querySelector("#title") as HTMLInputElement).value,
     slug: (app.querySelector("#slug") as HTMLInputElement).value,
     tags: (app.querySelector("#tags") as HTMLInputElement).value.split(",").map(s => s.trim()).filter(Boolean),
+    description: (app.querySelector("#description") as HTMLInputElement).value,
+    cover: (app.querySelector("#cover") as HTMLInputElement).value,
     markdown: (app.querySelector("#markdown") as HTMLTextAreaElement).value,
   });
-  const coverVal = () => (app.querySelector("#cover") as HTMLInputElement).value || null;
+  const coverVal = () => (app.querySelector("#cover") as HTMLInputElement).value;
   const descVal = () => (app.querySelector("#description") as HTMLInputElement).value;
 
-  // SaveController：保存失败（含 409 冲突）向上抛出，调用方据此中止发布/切换。
-  saveCtl = new SaveController(async () => {
+  // SaveController：single-flight；保存回调使用捕获的 input/baseVersion，不重读 DOM。
+  // 冲突 → 进入 blocked（onBlocked 已在 catch 内处理 UI），flush 据此中止发布/切换。
+  saveCtl = new SaveController(async (input: SaveInput, baseVersion: number) => {
     if (!state.current) return;
-    const baseVersion = state.current.version;
     setSave("保存中…");
-    const body = { ...gather(), description: descVal(), cover: coverVal(), baseVersion };
+    const body = { ...input, baseVersion };
     try {
       const updated = await api<Draft>(`/drafts/${state.current.id}`, {
         method: "PATCH",
@@ -211,11 +217,11 @@ function renderEditor() {
         setSave("版本冲突 ⚠");
         // 双栏比较：拉取服务端版本，与本地对照，由用户选择，不静默覆盖。
         const server = await api<Draft>(`/drafts/${state.current.id}`);
-        await showConflict(server, gather());
-        throw err; // 中止发布链路
+        await showConflict(server, input);
+      } else {
+        setSave("保存失败：" + err.message);
       }
-      setSave("保存失败：" + err.message);
-      throw err;
+      throw err; // 进入 blocked，中止发布/切换
     }
   }, 1500);
 
@@ -285,7 +291,7 @@ async function showConflict(server: Draft, localInput: SaveInput) {
         const updated = await api<Draft>(`/drafts/${server.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...localInput, description: (app.querySelector("#description") as HTMLInputElement)?.value, cover: (app.querySelector("#cover") as HTMLInputElement)?.value || null, baseVersion: server.version }),
+          body: JSON.stringify({ ...localInput, baseVersion: server.version }),
         });
         state.current = updated; saveCtl = null; renderEditor();
       } catch (err: any) { alert("重存失败：" + err.message); }
@@ -338,8 +344,16 @@ async function onPublish() {
   }
   try {
     const r = await api<{ jobId: number; status: string }>(`/drafts/${d.id}/${action}`, { method: "POST" });
-    alert(`已提交${action === "publish" ? "发布" : "撤回"}任务 #${r.jobId}（${r.status}）。等待 GitHub Actions 构建回调。`);
-    // 轮询 job
+    if (r.status === "succeeded") {
+      state.current = await api<Draft>(`/drafts/${state.current!.id}`);
+      renderEditor();
+      alert(
+        `${action === "publish" ? "发布" : "撤回"}成功。内容已提交 Git 仓库；线上站点需单独手动部署。`,
+      );
+      return;
+    }
+    alert(`已提交${action === "publish" ? "发布" : "撤回"}任务 #${r.jobId}（${r.status}）。`);
+    // 兼容服务中断后遗留的 queued/building job。
     pollJob(r.jobId);
   } catch (err: any) {
     alert(err.message);
