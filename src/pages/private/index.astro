@@ -1,0 +1,66 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Footer from "@/components/Footer.astro";
+import { listMyPrivatePosts } from "@/utils/blogApi";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+import "@/styles/studio.css";
+
+// 本人私有文档列表（SSR）。无登录/令牌失效 → 跳登录页。
+export const prerender = false;
+
+const token = Astro.cookies.get("fluxblog_token")?.value;
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const loginUrl = `${base}login/?next=${encodeURIComponent(Astro.url.pathname)}`;
+
+if (!token) {
+  return Astro.redirect(loginUrl, 302);
+}
+
+let posts;
+try {
+  posts = await listMyPrivatePosts(token);
+} catch {
+  return Astro.redirect(loginUrl, 302);
+}
+---
+
+<Layout title={`仅自己可见 | ${config.site.title}`}>
+  <Fragment slot="head">
+    <meta name="robots" content="noindex" />
+  </Fragment>
+
+  <Header />
+
+  <main id="main-content" class="app-layout" data-pagefind-ignore>
+    <h1 class="text-accent inline-block text-2xl font-bold sm:text-3xl">
+      仅自己可见的文档
+    </h1>
+    <p class="text-muted-foreground mt-2 mb-6 text-sm">
+      这些文档仅你登录后可见，不进公开站点、不进搜索/RSS。
+    </p>
+    {posts.length === 0 ? (
+      <p class="studio-hint">暂无私有文档。</p>
+    ) : (
+      <ul>
+        {posts.map(p => (
+          <li class="my-6">
+            <a
+              href={`${base}private/${p.slug}`}
+              class="text-accent inline-block text-lg font-medium underline decoration-dashed underline-offset-4 hover:opacity-75"
+            >
+              {p.title}
+            </a>
+            <p class="text-muted-foreground text-sm">{p.updatedAt?.slice(0, 10)}</p>
+            <p>{p.description}</p>
+          </li>
+        ))}
+      </ul>
+    )}
+  </main>
+
+  <Footer />
+</Layout>

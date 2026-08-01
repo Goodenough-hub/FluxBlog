@@ -1,0 +1,103 @@
+---
+import PostLayout from "@/layouts/PostLayout.astro";
+import Header from "@/components/Header.astro";
+import Footer from "@/components/Footer.astro";
+import Datetime from "@/components/Datetime.astro";
+import Tag from "@/components/Tag.astro";
+import { slugifyStr } from "@/utils/slugify";
+import { toTransitionName } from "@/utils/toTransitionName";
+import { getMyPrivatePost } from "@/utils/blogApi";
+import { renderMarkdown } from "@/utils/renderMarkdown";
+import BackButton from "@/pages/posts/[...slug]/_components/BackButton.astro";
+import BackToTopButton from "@/pages/posts/[...slug]/_components/BackToTopButton.astro";
+import config from "@/config";
+
+// 本人私有文档正文（SSR）。无登录/401 → 跳登录页；404 → 404。
+export const prerender = false;
+
+const slugParam = Astro.params.slug;
+const slug = Array.isArray(slugParam) ? slugParam.join("/") : slugParam;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const loginUrl = `${base}login/?next=${encodeURIComponent(Astro.url.pathname)}`;
+
+if (!slug) {
+  return new Response("Not Found", { status: 404 });
+}
+
+const token = Astro.cookies.get("fluxblog_token")?.value;
+if (!token) {
+  return Astro.redirect(loginUrl, 302);
+}
+
+let post;
+let notFound = false;
+try {
+  post = await getMyPrivatePost(slug, token);
+} catch (err: any) {
+  if (err?.status === 404) notFound = true;
+  else return Astro.redirect(loginUrl, 302); // 401/403 → 登录
+}
+if (notFound || !post) {
+  return new Response("Not Found", { status: 404 });
+}
+
+const html = await renderMarkdown(post.markdown);
+const { title, description, publishedAt, updatedAt, tags } = post;
+---
+
+<PostLayout
+  title={`${title} | ${config.site.title}`}
+  description={description}
+  publishedAt={publishedAt ? new Date(publishedAt) : undefined}
+  updatedAt={updatedAt ? new Date(updatedAt) : undefined}
+>
+  <Fragment slot="head">
+    <meta name="robots" content="noindex" />
+  </Fragment>
+
+  <Header />
+
+  <BackButton />
+
+  <main
+    id="main-content"
+    class:list={["app-layout", { "mt-8": !config.features.showBackButton }]}
+    data-pagefind-ignore
+  >
+    <h1
+      style={{ viewTransitionName: toTransitionName(title) }}
+      class="text-accent inline-block text-2xl font-bold sm:text-3xl"
+    >
+      {title}
+    </h1>
+
+    <div class="my-2 flex items-center gap-2">
+      <Datetime
+        publishedAt={publishedAt ?? ""}
+        updatedAt={updatedAt}
+        size="lg"
+      />
+      <span class="text-muted-foreground text-sm">🔒 仅自己可见</span>
+    </div>
+
+    <article
+      id="article"
+      class:list={[
+        "mt-8 w-full",
+        "app-prose max-w-app",
+        "prose-pre:bg-(--shiki-light-bg) dark:prose-pre:bg-(--shiki-dark-bg)",
+      ]}
+      set:html={html}
+    >
+    </article>
+
+    <hr class="my-8 border-dashed" />
+
+    <BackToTopButton />
+
+    <ul class="mt-4 mb-8 flex flex-wrap gap-4 sm:my-8">
+      {tags.map(tag => <Tag tag={slugifyStr(tag)} tagName={tag} size="sm" />)}
+    </ul>
+  </main>
+  <Footer />
+</PostLayout>

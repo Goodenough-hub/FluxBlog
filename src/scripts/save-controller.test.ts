@@ -8,6 +8,7 @@ const input = (md: string): SaveInput => ({
   description: "D",
   cover: "",
   markdown: md,
+  visibility: "private",
 });
 
 describe("SaveController single-flight", () => {

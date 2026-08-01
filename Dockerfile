@@ -1,17 +1,20 @@
-# Base stage for building the static files
-FROM node:lts AS base
+# FluxBlog SSR 镜像：构建 Astro（@astrojs/node standalone）并以 node 运行。
+# 注意：此为容器化部署路径；本项目的生产部署是 systemd + nginx（见 AGENTS.md §5.2）。
+# 运行时需提供 PUBLIC_BLOG_API（绝对地址，指向 AppPilot Go 后端）与 FLUXBLOG_SITE_URL。
+
+FROM node:22-alpine AS build
 WORKDIR /app
-
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
-
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY . .
-RUN pnpm run build
+ARG FLUXBLOG_SITE_URL=https://example.com
+ENV FLUXBLOG_SITE_URL=$FLUXBLOG_SITE_URL
+RUN npm run build
 
-# Runtime stage for serving the application
-FROM nginx:mainline-alpine-slim AS runtime
-COPY --from=base /app/dist /usr/share/nginx/html
-EXPOSE 80
+FROM node:22-alpine AS runtime
+WORKDIR /app
+ENV HOST=0.0.0.0
+ENV PORT=4321
+COPY --from=build /app/dist /app/dist
+EXPOSE 4321
+CMD ["node", "dist/server/entry.mjs"]

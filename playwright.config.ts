@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
-// FluxBlog E2E：基于生产构建后验证。需要先 `npm run build` 并 `npm run preview`，
-// 或指向已部署站点。CI 与本地默认测 http://127.0.0.1:4321/blog/（astro preview）。
+// FluxBlog E2E：基于生产构建后验证。默认起 Node SSR server（dist/server/entry.mjs）。
+// 或用 FLUXBLOG_E2E_BASE_URL 指向已部署站点（需后端 + PG + 已导入内容）。
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
@@ -13,7 +13,7 @@ export default defineConfig({
   webServer: process.env.FLUXBLOG_E2E_BASE_URL
     ? undefined
     : {
-        command: "npm run preview -- --port 4321",
+        command: "HOST=127.0.0.1 PORT=4321 node ./dist/server/entry.mjs",
         port: 4321,
         reuseExistingServer: true,
         timeout: 120_000,

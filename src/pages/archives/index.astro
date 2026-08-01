@@ -1,30 +1,42 @@
 ---
 import { getRelativeLocaleUrl } from "astro:i18n";
-import { getCollection } from "astro:content";
 import Layout from "@/layouts/Layout.astro";
 import Header from "@/components/Header.astro";
 import Breadcrumb from "@/components/Breadcrumb.astro";
 import Main from "@/components/Main.astro";
 import Footer from "@/components/Footer.astro";
 import Card from "@/components/Card.astro";
-import { postFilter } from "@/utils/postFilter";
-import { getPostsByGroupCondition } from "./_utils/getPostsByGroupCondition";
+import { listPublicPosts } from "@/utils/blogApi";
 import { useTranslations } from "@/i18n";
 import config from "@/config";
 
+// 归档（SSR）：按年/月分组公开文章。
+export const prerender = false;
+
 const locale = Astro.currentLocale ?? config.site.lang;
 
-// Redirect to 404 page if `showArchives` config is false
-const notFoundUrl = getRelativeLocaleUrl(locale, "404");
-if (!config.features.showArchives && notFoundUrl) {
-  return Astro.rewrite(notFoundUrl);
+if (!config.features.showArchives) {
+  return Astro.redirect(getRelativeLocaleUrl(locale, "404"));
 }
 
 const t = useTranslations(locale);
 
-const posts = await getCollection("posts");
-const filteredPosts = posts.filter(postFilter);
+const posts = await listPublicPosts();
 const monthFormatter = new Intl.DateTimeFormat(locale, { month: "long" });
+
+// 按 publishedAt 年→月分组。publishedAt 为 ISO 字符串。
+const byYear = new Map<number, Map<number, typeof posts>>();
+for (const p of posts) {
+  const date = new Date(p.publishedAt ?? p.updatedAt);
+  const y = date.getFullYear();
+  const m = date.getMonth() + 1;
+  if (!byYear.has(y)) byYear.set(y, new Map());
+  const months = byYear.get(y)!;
+  if (!months.has(m)) months.set(m, []);
+  months.get(m)!.push(p);
+}
+
+const years = [...byYear.keys()].sort((a, b) => b - a);
 ---
 
 <Layout title={`${t.pages.archivesTitle} | ${config.site.title}`}>
@@ -34,54 +46,32 @@ const monthFormatter = new Intl.DateTimeFormat(locale, { month: "long" });
 
   <Main pageTitle={t.pages.archivesTitle} pageDesc={t.pages.archivesDesc}>
     {
-      Object.entries(
-        getPostsByGroupCondition(filteredPosts, post =>
-          post.data.publishedAt.getFullYear()
-        )
-      )
-        .sort(([yearA], [yearB]) => Number(yearB) - Number(yearA))
-        .map(([year, yearGroup]) => (
+      years.map(year => {
+        const months = byYear.get(year)!;
+        const monthEntries = [...months.entries()].sort(
+          (a, b) => b[0] - a[0]
+        );
+        const yearTotal = monthEntries.reduce((n, [, g]) => n + g.length, 0);
+        return (
           <div>
             <span class="text-2xl font-bold">{year}</span>
-            <sup class="text-muted-foreground text-sm">{yearGroup.length}</sup>
-            {Object.entries(
-              getPostsByGroupCondition(
-                yearGroup,
-                post => post.data.publishedAt.getMonth() + 1
-              )
-            )
-              .sort(([monthA], [monthB]) => Number(monthB) - Number(monthA))
-              .map(([month, monthGroup]) => (
-                <div class="flex flex-col sm:flex-row">
-                  <div class="mt-6 min-w-36 text-lg sm:my-6">
-                    <span class="font-bold">
-                      {monthFormatter.format(
-                        new Date(2000, Number(month) - 1, 1)
-                      )}
-                    </span>
-                    <sup class="text-muted-foreground text-xs">
-                      {monthGroup.length}
-                    </sup>
-                  </div>
-                  <ul>
-                    {monthGroup
-                      .sort(
-                        (a, b) =>
-                          Math.floor(
-                            new Date(b.data.publishedAt).getTime() / 1000
-                          ) -
-                          Math.floor(
-                            new Date(a.data.publishedAt).getTime() / 1000
-                          )
-                      )
-                      .map(data => (
-                        <Card {...data} />
-                      ))}
-                  </ul>
+            <sup class="text-muted-foreground text-sm">{yearTotal}</sup>
+            {monthEntries.map(([month, group]) => (
+              <div class="flex flex-col sm:flex-row">
+                <div class="mt-6 min-w-36 text-lg sm:my-6">
+                  <span class="font-bold">
+                    {monthFormatter.format(new Date(2000, month - 1, 1))}
+                  </span>
+                  <sup class="text-muted-foreground text-xs">{group.length}</sup>
                 </div>
-              ))}
+                <ul>
+                  {group.map(post => <Card post={post} />)}
+                </ul>
+              </div>
+            ))}
           </div>
-        ))
+        );
+      })
     }
   </Main>
 

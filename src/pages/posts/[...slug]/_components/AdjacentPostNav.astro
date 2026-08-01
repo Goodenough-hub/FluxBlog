@@ -1,14 +1,13 @@
 ---
 import IconArrowLeft from "@/assets/icons/IconArrowLeft.svg";
 import IconArrowRight from "@/assets/icons/IconArrowRight.svg";
-import { getPostUrl } from "@/utils/getPostPaths";
+import { getPostUrlBySlug } from "@/utils/getPostPaths";
 import { useTranslations } from "@/i18n";
 import config from "@/config";
 
 type AdjacentPost = {
-  id: string;
+  slug: string;
   title: string;
-  filePath: string | undefined;
 } | null;
 
 type Props = {
@@ -25,7 +24,7 @@ const t = useTranslations(locale);
   {
     prevPost && (
       <a
-        href={getPostUrl(prevPost.id, prevPost.filePath, locale)}
+        href={getPostUrlBySlug(prevPost.slug, locale)}
         class="flex w-full gap-1 hover:opacity-75"
       >
         <IconArrowLeft class="inline-block flex-none rtl:rotate-180" />
@@ -39,7 +38,7 @@ const t = useTranslations(locale);
   {
     nextPost && (
       <a
-        href={getPostUrl(nextPost.id, nextPost.filePath, locale)}
+        href={getPostUrlBySlug(nextPost.slug, locale)}
         class="flex w-full justify-end gap-1 text-end hover:opacity-75 sm:col-start-2"
       >
         <div>

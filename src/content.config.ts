@@ -1,38 +1,10 @@
 import { defineCollection } from "astro:content";
 import { z } from "astro/zod";
 import { glob } from "astro/loaders";
-import config from "@/config";
 
-export const BLOG_PATH = "src/content/posts";
-
-// slug 全站唯一，允许小写字母、数字、连字符与中文；不以连字符开头/结尾。
-const slugRegex = /^[a-z0-9一-龥]+(?:-[a-z0-9一-龥]+)*$/;
-
-const posts = defineCollection({
-  loader: glob({ pattern: "**/[^_]*.{md,mdx}", base: `./${BLOG_PATH}` }),
-  schema: ({ image }) =>
-    z.object({
-      author: z.string().default(config.site.author),
-      publishedAt: z.date(),
-      updatedAt: z.date().optional().nullable(),
-      title: z.string(),
-      // slug 全站唯一，只允许小写字母、数字、连字符。默认从文件名推断。
-      slug: z
-        .string()
-        .regex(slugRegex, "slug 只允许小写字母、数字和连字符")
-        .optional(),
-      featured: z.boolean().optional(),
-      draft: z.boolean().optional(),
-      tags: z.array(z.string()).default(["others"]),
-      // cover：文章封面图（/blog/media/... 路径或 public/ 下资源）。
-      cover: image().or(z.string()).optional(),
-      description: z.string(),
-      canonicalURL: z.string().optional(),
-      hideEditPost: z.boolean().optional(),
-      timezone: z.string().optional(),
-    }),
-});
-
+// 文章（posts）集合已移除：内容以 Postgres blog_drafts 为权威源，
+// 经 AppPilot /api/v1/blog/posts* 下发，SSR 渲染。GitHub 仓库不再含文章 Markdown。
+// 仅保留 pages 集合（about 等静态页，预渲染）。
 const pages = defineCollection({
   loader: glob({ pattern: "**/[^_]*.{md,mdx}", base: "./src/content/pages" }),
   schema: z.object({
@@ -43,4 +15,4 @@ const pages = defineCollection({
   }),
 });
 
-export const collections = { posts, pages };
+export const collections = { pages };

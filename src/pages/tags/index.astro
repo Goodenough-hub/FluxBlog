@@ -1,20 +1,32 @@
 ---
-import { getCollection } from "astro:content";
 import Layout from "@/layouts/Layout.astro";
 import Header from "@/components/Header.astro";
 import Breadcrumb from "@/components/Breadcrumb.astro";
 import Main from "@/components/Main.astro";
 import Footer from "@/components/Footer.astro";
 import Tag from "@/components/Tag.astro";
-import { getUniqueTags } from "@/utils/getUniqueTags";
+import { listPublicPosts } from "@/utils/blogApi";
+import { slugifyStr } from "@/utils/slugify";
 import { useTranslations } from "@/i18n";
 import config from "@/config";
 
-const posts = await getCollection("posts", ({ data }) => !data.draft);
-const tags = getUniqueTags(posts);
+// 标签索引（SSR）：从公开文章聚合标签。
+export const prerender = false;
 
 const locale = Astro.currentLocale ?? config.site.lang;
 const t = useTranslations(locale);
+
+const posts = await listPublicPosts();
+
+type TagEntry = { tag: string; tagName: string };
+const seen = new Map<string, TagEntry>();
+for (const p of posts) {
+  for (const tagName of p.tags ?? []) {
+    const tag = slugifyStr(tagName);
+    if (!seen.has(tag)) seen.set(tag, { tag, tagName });
+  }
+}
+const tags = [...seen.values()].sort((a, b) => a.tag.localeCompare(b.tag));
 ---
 
 <Layout title={`${t.pages.tagsTitle} | ${config.site.title}`}>

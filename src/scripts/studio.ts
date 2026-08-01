@@ -28,6 +28,7 @@ type Draft = {
   cover: string | null;
   markdown: string;
   status: string;
+  visibility: "public" | "private";
   version: number;
   publishedVersion?: number | null;
   hasUnpublishedChanges?: boolean;
@@ -93,7 +94,7 @@ function renderList() {
     .map(
       d => `<tr data-id="${d.id}">
         <td>${escapeHtml(d.title || d.slug)}</td>
-        <td><span class="status status-${d.status}">${d.status}</span>${d.hasUnpublishedChanges ? '<span class="badge-dot" title="有未发布修改">●</span>' : ""}</td>
+        <td><span class="status status-${d.status}">${d.status}</span>${d.visibility === "private" ? '<span class="badge-lock" title="仅自己可见">🔒</span>' : ""}${d.hasUnpublishedChanges ? '<span class="badge-dot" title="有未发布修改">●</span>' : ""}</td>
         <td>v${d.version}${d.publishedVersion != null ? `/已发v${d.publishedVersion}` : ""}</td>
         <td>${escapeHtml(d.updatedAt || "")}</td>
       </tr>`
@@ -130,6 +131,7 @@ function renderList() {
           slug: fd.get("slug"),
           title: fd.get("title"),
           markdown: "",
+          visibility: "private",
         }),
       });
       state.current = d;
@@ -193,6 +195,10 @@ async function renderEditor() {
         <input id="tags" value="${escapeAttr((d.tags || []).join(","))}" placeholder="标签，逗号分隔" />
         <input id="description" value="${escapeAttr(d.description || "")}" placeholder="摘要" />
         <input id="cover" value="${escapeAttr(d.cover || "")}" placeholder="封面 URL（可选）" />
+        <select id="visibility">
+          <option value="public"${d.visibility === "public" ? " selected" : ""}>公开 — 任何人可读</option>
+          <option value="private"${d.visibility !== "public" ? " selected" : ""}>仅自己可见</option>
+        </select>
       </div>
       <div class="studio-dual">
         <div class="studio-pane"><div class="pane-label">编辑</div><div id="editor" class="editor-root"></div></div>
@@ -229,6 +235,7 @@ async function renderEditor() {
     description: val("#description"),
     cover: val("#cover"),
     markdown,
+    visibility: val("#visibility") === "public" ? "public" : "private",
   });
   const gatherAndSchedule = (md: string) => {
     const g = gather(md);
@@ -271,7 +278,7 @@ async function renderEditor() {
     1500
   );
 
-  ["#title", "#slug", "#tags", "#description", "#cover"].forEach(sel =>
+  ["#title", "#slug", "#tags", "#description", "#cover", "#visibility"].forEach(sel =>
     app
       .querySelector(sel)!
       .addEventListener("input", () =>
@@ -419,45 +426,25 @@ async function onPublish() {
     }
   }
   try {
-    const r = await api<{
-      jobId: number | null;
-      status: string;
-      noop?: boolean;
-    }>(`/drafts/${d.id}/${action}`, {
-      method: "POST",
-    });
-    if (r.noop || r.status === "succeeded") {
-      state.current = await api<Draft>(`/drafts/${state.current!.id}`);
+    const init: RequestInit = { method: "POST" };
+    if (action === "publish" && state.current) {
+      init.headers = { "Content-Type": "application/json" };
+      init.body = JSON.stringify({ visibility: state.current.visibility });
+    }
+    const r = await api<{ status: string; noop?: boolean }>(
+      `/drafts/${d.id}/${action}`,
+      init
+    );
+    if (r.noop || r.status === "succeeded" || r.status === "published" || r.status === "draft") {
+      if (state.current)
+        state.current = await api<Draft>(`/drafts/${state.current.id}`);
       await renderEditor();
-      alert(
-        `${action === "publish" ? "发布" : "撤回"}成功。内容已提交 Git 仓库；线上站点需单独手动部署。`
-      );
+      alert(`${action === "publish" ? "发布" : "撤回"}成功。`);
       return;
     }
-    alert(
-      `已提交${action === "publish" ? "发布" : "撤回"}任务（${r.status}）。`
-    );
-    pollJob(r.jobId as number);
+    alert(`已提交${action === "publish" ? "发布" : "撤回"}任务（${r.status}）。`);
   } catch (err: any) {
     alert(err.message);
-  }
-}
-
-async function pollJob(jobId: number) {
-  for (let i = 0; i < 20; i++) {
-    await new Promise(r => setTimeout(r, 5000));
-    try {
-      const job = await api<{ status: string }>(`/publish-jobs/${jobId}`);
-      if (job.status === "succeeded" || job.status === "failed") {
-        if (state.current)
-          state.current = await api<Draft>(`/drafts/${state.current.id}`);
-        await renderEditor();
-        alert(`任务 #${jobId} ${job.status}`);
-        return;
-      }
-    } catch {
-      /* retry */
-    }
   }
 }
 

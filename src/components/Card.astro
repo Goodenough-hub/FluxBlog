@@ -1,21 +1,21 @@
 ---
-import type { CollectionEntry } from "astro:content";
-import { getPostUrl } from "@/utils/getPostPaths";
+import { getPostUrlBySlug } from "@/utils/getPostPaths";
 import { toTransitionName } from "@/utils/toTransitionName";
 import Datetime from "./Datetime.astro";
+import type { PostSummary } from "@/utils/blogTypes";
 
 type Props = {
   variant?: "h2" | "h3";
-} & CollectionEntry<"posts">;
+  post: PostSummary;
+};
 
-const { variant: Heading = "h2", id, data, filePath } = Astro.props;
-
-const { title, description, ...props } = data;
+const { variant: Heading = "h2", post } = Astro.props;
+const { title, description, slug, publishedAt, updatedAt } = post;
 ---
 
 <li class="my-6">
   <a
-    href={getPostUrl(id, filePath, Astro.currentLocale)}
+    href={getPostUrlBySlug(slug, Astro.currentLocale)}
     class:list={[
       "text-accent inline-block text-lg font-medium",
       "decoration-dashed underline-offset-4 hover:underline",
@@ -26,6 +26,6 @@ const { title, description, ...props } = data;
       {title}
     </Heading>
   </a>
-  <Datetime {...props} />
+  <Datetime publishedAt={publishedAt ?? ""} updatedAt={updatedAt} />
   <p>{description}</p>
 </li>

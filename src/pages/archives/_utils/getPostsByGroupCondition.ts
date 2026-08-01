@@ -1,24 +1,3 @@
-import type { CollectionEntry } from "astro:content";
-
-type GroupKey = string | number | symbol;
-type GroupFunction<T> = (item: T, index?: number) => GroupKey;
-
-export function getPostsByGroupCondition(
-  posts: CollectionEntry<"posts">[],
-  groupFunction: GroupFunction<CollectionEntry<"posts">>
-) {
-  const result: Record<GroupKey, CollectionEntry<"posts">[]> = {};
-
-  for (let i = 0; i < posts.length; i++) {
-    const item = posts[i];
-    const groupKey = groupFunction(item, i);
-
-    if (!result[groupKey]) {
-      result[groupKey] = [];
-    }
-
-    result[groupKey].push(item);
-  }
-
-  return result;
-}
+// 已废弃：归档改 SSR 内联分组（src/pages/archives/index.astro），不再用 content collection。
+// 保留空文件避免破坏 import；可安全 git rm。
+export {};

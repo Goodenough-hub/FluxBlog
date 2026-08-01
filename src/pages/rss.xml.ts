@@ -1,22 +1,23 @@
 import rss from "@astrojs/rss";
-import { getCollection } from "astro:content";
-import { getSortedPosts } from "@/utils/getSortedPosts";
-import { getPostUrl } from "@/utils/getPostPaths";
+import { listPublicPosts } from "@/utils/blogApi";
+import { getPostUrlBySlug } from "@/utils/getPostPaths";
 import config from "@/config";
 
+// RSS 改为运行时从 AppPilot DB 生成（不再读 content collection）。
+export const prerender = false;
+
 export async function GET() {
-  const posts = await getCollection("posts");
-  const sortedPosts = getSortedPosts(posts);
+  const posts = await listPublicPosts();
 
   return rss({
     title: config.site.title,
     description: config.site.description,
     site: config.site.url,
-    items: sortedPosts.map(({ data, id, filePath }) => ({
-      link: getPostUrl(id, filePath, config.site.lang),
-      title: data.title,
-      description: data.description,
-      pubDate: new Date(data.updatedAt ?? data.publishedAt),
+    items: posts.map(({ slug, title, description, publishedAt, updatedAt }) => ({
+      link: getPostUrlBySlug(slug, config.site.lang),
+      title,
+      description,
+      pubDate: new Date(updatedAt ?? publishedAt ?? Date.now()),
     })),
   });
 }

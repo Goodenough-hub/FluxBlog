@@ -31,7 +31,7 @@ export default defineAstroPaperConfig({
       enabled: true,
       url: "https://github.com/Goodenough-hub/FluxBlog/edit/main/",
     },
-    search: "pagefind",
+    search: true,
   },
   socials: [
     { name: "github", url: "https://github.com/Goodenough-hub/FluxBlog" },

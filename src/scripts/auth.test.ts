@@ -1,20 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// auth.ts 在调用时读取 globalThis.localStorage 与 fetch，下面分别 stub。
-function makeStorage() {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => m.set(k, String(v)),
-    removeItem: (k: string) => m.delete(k),
-    clear: () => m.clear(),
-  };
-}
+// auth.ts 现在是 cookie 模式：JS 不持有 token，只读 fluxblog_session 判断登录态。
+// 下面 stub document.cookie 与 fetch。
 
+let cookieStore = "";
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  vi.stubGlobal("localStorage", makeStorage());
+  cookieStore = "";
+  // 极简 document：cookie 读写。
+  vi.stubGlobal("document", {
+    get cookie() {
+      return cookieStore;
+    },
+    set cookie(_v: string) {
+      // 测试直接通过设置 cookieStore 模拟登录态，写入忽略。
+    },
+  });
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -22,65 +24,57 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-import {
-  setSession,
-  ensureToken,
-  refresh,
-  clearSession,
-  isLoggedIn,
-} from "./auth";
+import { login, refresh, clearSession, isLoggedIn } from "./auth";
 
-describe("auth token refresh", () => {
-  it("令牌离到期>5min：ensureToken 不刷新", async () => {
-    setSession("tok-1", Math.floor(Date.now() / 1000) + 3600);
-    const t = await ensureToken();
-    expect(t).toBe("tok-1");
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("令牌临近到期：ensureToken 主动刷新一次", async () => {
-    setSession("tok-1", Math.floor(Date.now() / 1000) + 60); // <5min
-    fetchMock.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          token: "tok-2",
-          expiresAt: Math.floor(Date.now() / 1000) + 7200,
-        }),
-        {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }
-      )
-    );
-    const t = await ensureToken();
-    expect(t).toBe("tok-2");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("并发 refresh：全局 mutex 只发一次", async () => {
-    setSession("tok-1", Math.floor(Date.now() / 1000) + 60);
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ token: "tok-2", expiresAt: 9999999999 }), {
-        status: 200,
-      })
-    );
-    const [a, b] = await Promise.all([refresh(), refresh()]);
-    expect(a).toBe("tok-2");
-    expect(b).toBe("tok-2");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("refresh 失败：清理会话", async () => {
-    setSession("tok-1", Math.floor(Date.now() / 1000) + 60);
-    fetchMock.mockResolvedValueOnce(new Response("bad", { status: 401 }));
-    const t = await refresh();
-    expect(t).toBeNull();
+describe("auth (cookie 模式)", () => {
+  it("isLoggedIn：仅当 fluxblog_session=1 为真", () => {
+    cookieStore = "fluxblog_session=1";
+    expect(isLoggedIn()).toBe(true);
+    cookieStore = "other=2; fluxblog_session=1; foo=bar";
+    expect(isLoggedIn()).toBe(true);
+    cookieStore = "other=2";
+    expect(isLoggedIn()).toBe(false);
+    cookieStore = "";
     expect(isLoggedIn()).toBe(false);
   });
 
-  it("clearSession 后 ensureToken 返回 null", async () => {
-    setSession("tok-1", Math.floor(Date.now() / 1000) + 3600);
-    clearSession();
-    expect(await ensureToken()).toBeNull();
+  it("login 成功：fetch 带 credentials:include + JSON body，返回 true", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    const ok = await login("u", "p");
+    expect(ok).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/auth\/login$/);
+    expect((init as RequestInit).credentials).toBe("include");
+    expect((init as RequestInit).method).toBe("POST");
+  });
+
+  it("login 失败（401）：返回 false", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("bad", { status: 401 }));
+    expect(await login("u", "p")).toBe(false);
+  });
+
+  it("并发 refresh：全局 mutex 只发一次", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    const [a, b] = await Promise.all([refresh(), refresh()]);
+    expect(a).toBe(true);
+    expect(b).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0];
+    expect((init as RequestInit).credentials).toBe("include");
+  });
+
+  it("refresh 失败（401）：返回 false", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("bad", { status: 401 }));
+    expect(await refresh()).toBe(false);
+  });
+
+  it("clearSession：调 /auth/logout", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await clearSession();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/auth\/logout$/);
+    expect((init as RequestInit).method).toBe("POST");
+    expect((init as RequestInit).credentials).toBe("include");
   });
 });

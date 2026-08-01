@@ -2,57 +2,47 @@
 import { getRelativeLocaleUrl } from "astro:i18n";
 import Layout from "@/layouts/Layout.astro";
 import Header from "@/components/Header.astro";
-import Main from "@/components/Main.astro";
 import Breadcrumb from "@/components/Breadcrumb.astro";
+import Main from "@/components/Main.astro";
 import Card from "@/components/Card.astro";
 import Footer from "@/components/Footer.astro";
 import Pagination from "@/components/Pagination.astro";
 import { listPublicPosts } from "@/utils/blogApi";
-import { slugifyStr } from "@/utils/slugify";
 import { useTranslations } from "@/i18n";
 import config from "@/config";
 
-// 单标签下的文章列表（SSR）。URL: /tags/<tag>、/tags/<tag>/2。
+// 文章列表第 N 页（SSR）。URL: /posts/page/2。
 export const prerender = false;
 
-const tag = Astro.params.tag ?? "";
 const pageStr = Astro.params.page;
-const hasPageParam = !!pageStr;
 const currentPage = pageStr && /^\d+$/.test(pageStr) ? parseInt(pageStr, 10) : 1;
 
 const locale = Astro.currentLocale ?? config.site.lang;
 const t = useTranslations(locale);
 
 const all = await listPublicPosts();
-const tagName =
-  all.flatMap(p => p.tags ?? []).find(name => slugifyStr(name) === tag) ?? tag;
-
-const tagPosts = all.filter(p => (p.tags ?? []).some(name => slugifyStr(name) === tag));
 const perPage = config.posts.perPage;
-const lastPage = Math.max(1, Math.ceil(tagPosts.length / perPage));
+const lastPage = Math.max(1, Math.ceil(all.length / perPage));
 
-// 仅当显式给了页码且越界/为第 1 页时重定向回标签首页（/tags/foo 本身渲染第 1 页）。
-if (hasPageParam && (currentPage < 2 || currentPage > lastPage)) {
-  return Astro.redirect(getRelativeLocaleUrl(locale, `tags/${tag}`), 302);
+if (currentPage < 2 || currentPage > lastPage) {
+  // 第 1 页归 /posts；越界归 /posts。
+  return Astro.redirect(getRelativeLocaleUrl(locale, "posts"), 302);
 }
 
-const slice = tagPosts.slice((currentPage - 1) * perPage, currentPage * perPage);
+const slice = all.slice((currentPage - 1) * perPage, currentPage * perPage);
 
-const tagsBase = getRelativeLocaleUrl(locale, `tags/${tag}`);
-const pageUrl = (n: number) => `${tagsBase}/${n}`;
+const postsBase = getRelativeLocaleUrl(locale, "posts");
+const pageUrl = (n: number) => `${postsBase}/page/${n}`;
 const prevUrl = currentPage > 1 ? pageUrl(currentPage - 1) : undefined;
 const nextUrl = currentPage < lastPage ? pageUrl(currentPage + 1) : undefined;
 ---
 
-<Layout title={`${t.pages.tagTitle}: ${tagName} | ${config.site.title}`}>
+<Layout title={`${t.pages.postsTitle} | ${config.site.title}`}>
   <Header />
 
   <Breadcrumb />
 
-  <Main
-    pageTitle={`${t.pages.tagTitle}: ${tagName}`}
-    pageDesc={`${t.pages.tagDesc} "${tagName}".`}
-  >
+  <Main pageTitle={t.pages.postsTitle} pageDesc={t.pages.postsDesc}>
     <ul>
       {slice.map(post => <Card post={post} />)}
     </ul>

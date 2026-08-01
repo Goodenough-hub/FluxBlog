@@ -1,29 +1,33 @@
 import type { APIRoute } from "astro";
-import { getCollection } from "astro:content";
 import { fontData, experimental_getFontFileURL } from "astro:assets";
 import satori from "satori";
 import sharp from "sharp";
 import { getFontPathByWeight } from "@/utils/getFontPathByWeight";
-import { getPostSlug } from "@/utils/getPostPaths";
+import { getPublicPost } from "@/utils/blogApi";
 import config from "@/config";
 
-export async function getStaticPaths() {
+// 文章 OG 图改为按需生成（SSR）：从 API 取标题，satori+sharp 渲染。
+export const prerender = false;
+
+export const GET: APIRoute = async ({ params, url }) => {
   if (!config.features.dynamicOgImage) {
-    return [];
+    return new Response(null, { status: 404, statusText: "Not found" });
   }
 
-  const posts = await getCollection("posts").then(p =>
-    p.filter(({ data }) => !data.draft && !data.cover)
-  );
+  const slugParam = params.slug;
+  const slug = Array.isArray(slugParam) ? slugParam.join("/") : slugParam;
+  if (!slug) {
+    return new Response(null, { status: 404, statusText: "Not found" });
+  }
 
-  return posts.map(post => ({
-    params: { slug: getPostSlug(post.id, post.filePath) },
-    props: post,
-  }));
-}
-
-export const GET: APIRoute = async ({ props, url }) => {
-  if (!config.features.dynamicOgImage) {
+  let post;
+  try {
+    post = await getPublicPost(slug);
+  } catch {
+    // 有封面的文章不生成动态 OG（文章页逻辑已优先用 cover）。
+    return new Response(null, { status: 404, statusText: "Not found" });
+  }
+  if (post.cover) {
     return new Response(null, { status: 404, statusText: "Not found" });
   }
 
@@ -33,7 +37,7 @@ export const GET: APIRoute = async ({ props, url }) => {
 
   if (regularFontPath === undefined || boldFontPath === undefined) {
     // 构建环境无法获取字体（如离线沙箱）时优雅跳过 OG 图生成，
-    // 返回 404 而非中断整个构建。CI 有字体时仍正常生成。
+    // 返回 404 而非中断整个请求。CI 有字体时仍正常生成。
     return new Response(null, { status: 404, statusText: "Not found" });
   }
 
@@ -112,7 +116,7 @@ export const GET: APIRoute = async ({ props, url }) => {
                           maxHeight: "84%",
                           overflow: "hidden",
                         },
-                        children: props.data.title,
+                        children: post.title,
                       },
                     },
                     {
@@ -128,28 +132,7 @@ export const GET: APIRoute = async ({ props, url }) => {
                         children: [
                           {
                             type: "span",
-                            props: {
-                              children: [
-                                "by ",
-                                {
-                                  type: "span",
-                                  props: {
-                                    style: { color: "transparent" },
-                                    children: '"',
-                                  },
-                                },
-                                {
-                                  type: "span",
-                                  props: {
-                                    style: {
-                                      overflow: "hidden",
-                                      fontWeight: "bold",
-                                    },
-                                    children: props.data.author,
-                                  },
-                                },
-                              ],
-                            },
+                            props: { children: "by " },
                           },
                           {
                             type: "span",

@@ -1,8 +1,8 @@
 /**
- * FluxBlog Studio API 客户端：Bearer 鉴权 + 令牌自动刷新 + 401 重放一次。
- * 替代 studio.ts 内联的 fetch。
+ * FluxBlog Studio API 客户端：cookie 鉴权（credentials:'include'）+ 401 刷新重放一次。
+ * 替代 studio.ts 内联的 fetch。token 不再由 JS 管理，由 httpOnly cookie 自动携带。
  */
-import { ensureToken, refresh, clearSession, BLOG_API } from "./auth";
+import { refresh, BLOG_API } from "./auth";
 
 export class ApiError extends Error {
   constructor(
@@ -14,12 +14,9 @@ export class ApiError extends Error {
   }
 }
 
-/** 受保护图片：带 Bearer 取 Blob URL（调用方负责 revoke）。 */
+/** 受保护图片：带 cookie 取 Blob URL（调用方负责 revoke）。 */
 export async function fetchAssetBlob(path: string): Promise<string> {
-  const token = await ensureToken();
-  const res = await fetch(`${BLOG_API}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const res = await fetch(`${BLOG_API}${path}`, { credentials: "include" });
   if (!res.ok) throw new ApiError(res.status, `asset ${res.status}`);
   const blob = await res.blob();
   return URL.createObjectURL(blob);
@@ -34,24 +31,20 @@ async function apiWithRetry<T>(
   opts: RequestInit,
   allowRetry: boolean
 ): Promise<T> {
-  const token = await ensureToken();
   const headers: Record<string, string> = {
     ...(opts.headers as Record<string, string>),
   };
-  if (token && !headers["Authorization"])
-    headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${BLOG_API}${path}`, { ...opts, headers });
+  const res = await fetch(`${BLOG_API}${path}`, {
+    ...opts,
+    headers,
+    credentials: "include",
+  });
 
   if (res.status === 401 && allowRetry) {
-    const fresh = await refresh();
-    if (fresh) {
-      const h2: Record<string, string> = {
-        ...(opts.headers as Record<string, string>),
-      };
-      h2["Authorization"] = `Bearer ${fresh}`;
-      return apiWithRetry<T>(path, { ...opts, headers: h2 }, false);
+    const ok = await refresh();
+    if (ok) {
+      return apiWithRetry<T>(path, { ...opts }, false);
     }
-    clearSession();
     throw new ApiError(401, "未登录或令牌失效");
   }
   if (!res.ok) {

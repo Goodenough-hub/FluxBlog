@@ -55,10 +55,10 @@ interface FeaturesConfig {
       }
     | { enabled: false };
   /**
-   * Search provider. "pagefind" ships in the base template.
-   * Set to false to disable search entirely.
+   * 搜索开关。搜索改后端 /api/v1/blog/posts/search（ILIKE），不再用 Pagefind。
+   * 设 false 关闭搜索入口。
    */
-  search?: "pagefind" | false;
+  search?: boolean;
 }
 
 interface SocialLink {

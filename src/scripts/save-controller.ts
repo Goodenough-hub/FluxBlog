@@ -18,6 +18,7 @@ export interface SaveInput {
   description: string;
   cover: string;
   markdown: string;
+  visibility: "public" | "private";
 }
 
 type SaveState = "idle" | "saving" | "blocked";

@@ -1,12 +1,7 @@
-import {
-  defineConfig,
-  envField,
-  fontProviders,
-  svgoOptimizer,
-} from "astro/config";
+import { defineConfig, envField, fontProviders, svgoOptimizer } from "astro/config";
 import tailwindcss from "@tailwindcss/vite";
+import node from "@astrojs/node";
 import mdx from "@astrojs/mdx";
-import sitemap from "@astrojs/sitemap";
 import { unified } from "@astrojs/markdown-remark";
 import remarkToc from "remark-toc";
 import remarkCollapse from "remark-collapse";
@@ -28,13 +23,8 @@ export default defineConfig({
   site: config.site.url,
   base: "/blog",
   trailingSlash: "ignore",
-  integrations: [
-    mdx(),
-    sitemap({
-      filter: page =>
-        config.features?.showArchives !== false || !page.endsWith("/archives/"),
-    }),
-  ],
+  adapter: node({ mode: "standalone" }),
+  integrations: [mdx()],
   i18n: {
     locales: ["zh-CN"],
     defaultLocale: "zh-CN",

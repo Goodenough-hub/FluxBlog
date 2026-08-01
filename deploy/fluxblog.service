@@ -1,0 +1,29 @@
+# /etc/systemd/system/fluxblog.service
+# FluxBlog SSR（Astro Node standalone）。内容来自 AppPilot Go 后端 + Postgres，
+# 不再有静态产物 /var/www/fluxblog 的 alias（仅 _astro 静态资源仍由 nginx 服务）。
+# 部署：构建产物 dist/server/entry.mjs 与 dist/client/ 上传到 /opt/fluxblog 与 /var/www/fluxblog。
+#
+# 启用：sudo systemctl daemon-reload && sudo systemctl enable --now fluxblog
+# 改环境后：sudo systemctl restart fluxblog
+
+[Unit]
+Description=FluxBlog SSR (Astro Node standalone)
+After=network.target postgresql.service apppilot.service
+
+[Service]
+Type=simple
+User=fluxblog
+Group=fluxblog
+WorkingDirectory=/opt/fluxblog
+Environment=HOST=127.0.0.1
+Environment=PORT=4321
+# 绝对地址（Node fetch 不接受相对路径）；指向本机 AppPilot Go 后端。
+Environment=PUBLIC_BLOG_API=http://127.0.0.1:8080/api/v1/blog
+# 站点完整 URL（RSS/sitemap/OG 拼绝对链接用）。
+Environment=FLUXBLOG_SITE_URL=https://blog.example.com
+ExecStart=/usr/bin/node /opt/fluxblog/server/entry.mjs
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
