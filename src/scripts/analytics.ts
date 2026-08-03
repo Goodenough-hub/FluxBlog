@@ -25,8 +25,7 @@ function trackPageview(): void {
   })
 }
 
-// Track initial page load
-trackPageview()
-
-// Track client-side navigations (Astro ClientRouter)
+// Track initial page load and client-side navigations (Astro ClientRouter).
+// `astro:page-load` fires on both initial load and client-side navigations,
+// so a single listener covers both cases.
 document.addEventListener('astro:page-load', trackPageview)
