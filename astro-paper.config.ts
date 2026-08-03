@@ -16,6 +16,8 @@ export default defineAstroPaperConfig({
     lang: "zh-CN",
     timezone: "Asia/Shanghai",
     dir: "ltr",
+    heroIntro:
+      "这里是 FluxBlog，我的个人技术博客。我是一名后端工程师，关注 AI Infra 与 AI Agent 的落地——这里记录工程实践、系统设计与踩过的坑，偶有零散思考。本站用 Astro 搭建，默认支持浅色与深色模式，欢迎通过 RSS 订阅。",
   },
   posts: {
     perPage: 10,

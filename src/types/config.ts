@@ -19,6 +19,8 @@ interface SiteConfig {
   dir?: "ltr" | "rtl" | "auto";
   /** Google Search Console verification meta tag value */
   googleVerification?: string;
+  /** Hero intro text shown on the homepage */
+  heroIntro?: string;
 }
 
 interface PostsConfig {
@@ -113,6 +115,7 @@ type ResolvedSiteConfig = Required<
     | "timezone"
     | "dir"
     | "ogImage"
+    | "heroIntro"
   >
 > &
   Pick<SiteConfig, "profile" | "googleVerification">;
