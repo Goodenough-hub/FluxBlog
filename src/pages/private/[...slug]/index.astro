@@ -10,6 +10,7 @@ import { getMyPrivatePost } from "@/utils/blogApi";
 import { renderMarkdown } from "@/utils/renderMarkdown";
 import BackButton from "@/pages/posts/[...slug]/_components/BackButton.astro";
 import BackToTopButton from "@/pages/posts/[...slug]/_components/BackToTopButton.astro";
+import ProjectBadge from "@/components/ProjectBadge.astro";
 import config from "@/config";
 
 // 本人私有文档正文（SSR）。无登录/401 → 跳登录页；404 → 404。
@@ -77,6 +78,9 @@ const { title, description, publishedAt, updatedAt, tags } = post;
         updatedAt={updatedAt}
         size="lg"
       />
+      {post.projectName && post.projectId != null && (
+        <ProjectBadge id={post.projectId} name={post.projectName} />
+      )}
       <span class="text-muted-foreground text-sm">🔒 仅自己可见</span>
     </div>
 

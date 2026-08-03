@@ -6,6 +6,7 @@ export default {
     posts: "文章",
     tags: "标签",
     about: "关于",
+    projects: "项目",
     archives: "归档",
     search: "搜索",
   },
@@ -52,6 +53,9 @@ export default {
 
     searchTitle: "搜索",
     searchDesc: "搜索任意文章……",
+
+    projectsTitle: "项目",
+    projectsDesc: "按项目分组的文章。",
   },
   a11y: {
     skipToContent: "跳到正文",

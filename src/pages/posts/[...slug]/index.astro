@@ -13,6 +13,7 @@ import ShareLinks from "./_components/ShareLinks.astro";
 import BackButton from "./_components/BackButton.astro";
 import BackToTopButton from "./_components/BackToTopButton.astro";
 import AdjacentPostNav from "./_components/AdjacentPostNav.astro";
+import ProjectBadge from "@/components/ProjectBadge.astro";
 import config from "@/config";
 
 // 公开文章页改为按需 SSR：从 AppPilot DB 取正文，服务端渲染。
@@ -86,6 +87,9 @@ const ogImage = ogImageUrl
         updatedAt={updatedAt}
         size="lg"
       />
+      {post.projectName && post.projectId != null && (
+        <ProjectBadge id={post.projectId} name={post.projectName} />
+      )}
     </div>
 
     <article

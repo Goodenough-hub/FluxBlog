@@ -1,0 +1,17 @@
+---
+import { getProjectUrlByID } from "@/utils/getPostPaths";
+
+interface Props {
+  id: number;
+  name: string;
+}
+
+const { id, name } = Astro.props;
+---
+
+<a
+  href={getProjectUrlByID(id, Astro.currentLocale)}
+  class="text-muted-foreground hover:text-accent inline-block rounded border border-border px-2 py-0.5 text-xs"
+>
+  {name}
+</a>

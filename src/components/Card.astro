@@ -2,6 +2,7 @@
 import { getPostUrlBySlug } from "@/utils/getPostPaths";
 import { toTransitionName } from "@/utils/toTransitionName";
 import Datetime from "./Datetime.astro";
+import ProjectBadge from "./ProjectBadge.astro";
 import type { PostSummary } from "@/utils/blogTypes";
 
 type Props = {
@@ -10,7 +11,7 @@ type Props = {
 };
 
 const { variant: Heading = "h2", post } = Astro.props;
-const { title, description, slug, publishedAt, updatedAt } = post;
+const { title, description, slug, publishedAt, updatedAt, projectId, projectName } = post;
 ---
 
 <li class="my-6">
@@ -27,5 +28,10 @@ const { title, description, slug, publishedAt, updatedAt } = post;
     </Heading>
   </a>
   <Datetime publishedAt={publishedAt ?? ""} updatedAt={updatedAt} />
+  {projectName && projectId != null && (
+    <span class="ml-2">
+      <ProjectBadge id={projectId} name={projectName} />
+    </span>
+  )}
   <p>{description}</p>
 </li>

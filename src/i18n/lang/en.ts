@@ -6,6 +6,7 @@ export default {
     posts: "Posts",
     tags: "Tags",
     about: "About",
+    projects: "Projects",
     archives: "Archives",
     search: "Search",
   },
@@ -52,6 +53,9 @@ export default {
 
     searchTitle: "Search",
     searchDesc: "Search any article ...",
+
+    projectsTitle: "Projects",
+    projectsDesc: "Articles grouped by project.",
   },
   a11y: {
     skipToContent: "Skip to content",

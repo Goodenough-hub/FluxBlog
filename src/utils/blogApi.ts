@@ -7,7 +7,7 @@
  *
  * 公开读无需鉴权；私有读带 Bearer（token 来自 SSR 读取的 cookie，见 Phase 3）。
  */
-import type { Post, PostSummary } from "./blogTypes";
+import type { Post, PostSummary, ProjectSummary, Project } from "./blogTypes";
 
 const API_BASE =
   process.env.BLOG_API_INTERNAL ||
@@ -28,9 +28,10 @@ function authHeader(token?: string): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** 列出公开已发布文档（不含正文）。 */
-export function listPublicPosts(): Promise<PostSummary[]> {
-  return fetchJSON<PostSummary[]>("/posts");
+/** 列出公开已发布文档（不含正文）。可选 projectId 过滤。 */
+export function listPublicPosts(projectId?: number): Promise<PostSummary[]> {
+  const qs = projectId ? `?projectId=${projectId}` : "";
+  return fetchJSON<PostSummary[]>(`/posts${qs}`);
 }
 
 /** 取单篇公开已发布文档（含 markdown 正文）。 */
@@ -60,4 +61,14 @@ export function getMyPrivatePost(slug: string, token: string): Promise<Post> {
   });
 }
 
-export type { Post, PostSummary };
+/** 列出所有 project（含公开文章数）。 */
+export function listPublicProjects(): Promise<ProjectSummary[]> {
+  return fetchJSON<ProjectSummary[]>("/projects");
+}
+
+/** 取单个 project 元数据。 */
+export function getPublicProject(id: number): Promise<Project> {
+  return fetchJSON<Project>(`/projects/${id}`);
+}
+
+export type { Post, PostSummary, ProjectSummary, Project };

@@ -11,3 +11,11 @@ export function getPostUrlBySlug(
 ): string {
   return getRelativeLocaleUrl(locale, `posts/${slug}`);
 }
+
+/** 按 project ID 构造 project 详情页 URL。 */
+export function getProjectUrlByID(
+  id: number,
+  locale: string | undefined = config.site.lang
+): string {
+  return getRelativeLocaleUrl(locale, `projects/${id}`);
+}

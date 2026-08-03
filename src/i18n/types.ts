@@ -4,6 +4,7 @@ export interface UIStrings {
     posts: string;
     tags: string;
     about: string;
+    projects: string;
     archives: string;
     search: string;
   };
@@ -50,6 +51,9 @@ export interface UIStrings {
 
     searchTitle: string;
     searchDesc: string;
+
+    projectsTitle: string;
+    projectsDesc: string;
   };
   a11y: {
     skipToContent: string;

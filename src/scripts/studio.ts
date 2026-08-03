@@ -18,6 +18,13 @@ import {
   loadSnapshot,
   clearSnapshot,
 } from "./studio-idb";
+import {
+  initSidebar,
+  setDrafts,
+  setSelectedDraftId,
+  type SidebarProject,
+  type SidebarDraft,
+} from "./studio-sidebar";
 
 type Draft = {
   id: number;
@@ -30,6 +37,7 @@ type Draft = {
   status: string;
   visibility: "public" | "private";
   version: number;
+  projectId?: number | null;
   publishedVersion?: number | null;
   hasUnpublishedChanges?: boolean;
   createdAt?: string;
@@ -38,7 +46,7 @@ type Draft = {
 
 const app = document.getElementById("studio-app")!;
 
-let state: { drafts: Draft[]; current?: Draft } = { drafts: [] };
+let state: { drafts: Draft[]; current?: Draft; projects: SidebarProject[] } = { drafts: [], projects: [] };
 let saveCtl: SaveController | null = null;
 let preview: PreviewRenderer | null = null;
 let editor: MilkdownEditor | null = null;
@@ -46,7 +54,13 @@ let beforeunloadBound = false;
 
 function render() {
   if (!isLoggedIn()) return renderLogin();
-  if (!state.current) return renderList();
+  if (!state.current) {
+    setDrafts(buildSidebarDrafts());
+    setSelectedDraftId(null);
+    return renderList();
+  }
+  setDrafts(buildSidebarDrafts());
+  setSelectedDraftId(state.current.id);
   void renderEditor();
 }
 
@@ -87,6 +101,24 @@ async function reloadDrafts() {
   } catch {
     state.drafts = [];
   }
+}
+
+async function reloadProjects() {
+  try {
+    state.projects = await api<SidebarProject[]>("/projects");
+  } catch {
+    state.projects = [];
+  }
+}
+
+function buildSidebarDrafts(): SidebarDraft[] {
+  return state.drafts.map(d => ({
+    id: d.id,
+    title: d.title,
+    slug: d.slug,
+    projectId: d.projectId ?? null,
+    updatedAt: d.updatedAt ?? "",
+  }));
 }
 
 function renderList() {
@@ -199,6 +231,10 @@ async function renderEditor() {
           <option value="public"${d.visibility === "public" ? " selected" : ""}>公开 — 任何人可读</option>
           <option value="private"${d.visibility !== "public" ? " selected" : ""}>仅自己可见</option>
         </select>
+        <select id="project">
+          <option value="">无归属</option>
+          ${state.projects.map(p => `<option value="${p.id}"${d.projectId === p.id ? " selected" : ""}>${escapeHtml(p.name)}</option>`).join("")}
+        </select>
       </div>
       <div class="studio-dual">
         <div class="studio-pane"><div class="pane-label">编辑</div><div id="editor" class="editor-root"></div></div>
@@ -236,6 +272,7 @@ async function renderEditor() {
     cover: val("#cover"),
     markdown,
     visibility: val("#visibility") === "public" ? "public" : "private",
+    projectId: val("#project") ? Number(val("#project")) : null,
   });
   const gatherAndSchedule = (md: string) => {
     const g = gather(md);
@@ -278,7 +315,7 @@ async function renderEditor() {
     1500
   );
 
-  ["#title", "#slug", "#tags", "#description", "#cover", "#visibility"].forEach(sel =>
+  ["#title", "#slug", "#tags", "#description", "#cover", "#visibility", "#project"].forEach(sel =>
     app
       .querySelector(sel)!
       .addEventListener("input", () =>
@@ -522,6 +559,25 @@ function escapeAttr(s: string) {
 
 (async function main() {
   await initDB();
-  if (isLoggedIn()) await reloadDrafts();
+  if (isLoggedIn()) {
+    await reloadDrafts();
+    await reloadProjects();
+  }
+  initSidebar({
+    onSelectDraft: (id: number) => {
+      const d = state.drafts.find(x => x.id === id);
+      if (d) {
+        state.current = d;
+        void recoverOrRender();
+      }
+    },
+    onDraftsChanged: () => {
+      void reloadDrafts().then(() => {
+        setDrafts(buildSidebarDrafts());
+        setSelectedDraftId(state.current?.id ?? null);
+      });
+    },
+  });
+  setDrafts(buildSidebarDrafts());
   render();
 })();
