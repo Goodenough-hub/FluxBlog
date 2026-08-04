@@ -8,7 +8,7 @@ export const xcodeDark: ThemeRegistrationRaw = {
     "editor.background": "#292A30",
     "editor.foreground": "#DFDFE0",
   },
-  tokenColors: [
+  settings: [
     { scope: ["comment", "punctuation.definition.comment"], settings: { foreground: "#7F8C98" } },
     {
       scope: ["keyword", "storage", "storage.type", "storage.modifier", "keyword.control", "keyword.operator.new"],

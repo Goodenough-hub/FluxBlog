@@ -3,7 +3,7 @@
  * remark-math / rehype-katex / remark-mermaid，再按需客户端加载 Mermaid 与 Shiki。
  *
  * - 200ms 防抖 + 渲染序号：丢弃过期异步结果。
- * - Mermaid strict security；Shiki 双主题（min-light / night-owl），与公开文章一致。
+ * - Mermaid strict security；Shiki 双主题（Xcode 浅色 / 深色，即 xcode-light / xcode-dark），与公开文章一致。
  * - 受保护图片（/api/v1/blog/assets/:id）通过 Bearer fetch 取 Blob URL，
  *   切换/重绘/退出时统一 revoke。
  */
