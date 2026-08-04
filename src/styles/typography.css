@@ -96,16 +96,70 @@
   }
 
   /* ===== Code Blocks & Syntax Highlighting ===== */
-  .astro-code {
-    @apply outline-border flex border bg-(--shiki-light-bg) text-(--shiki-light) [&_span]:text-(--shiki-light);
+  /* macOS 窗口容器：全局样式，公开文章与 Studio 预览共用（不挂 prose）。 */
+  .xcode-window {
+    @apply border-border my-4 overflow-hidden rounded-xl border shadow-sm;
   }
 
+  .xcode-titlebar {
+    @apply border-border bg-muted/60 flex items-center gap-2 border-b px-3 py-2 text-xs;
+  }
+
+  /* 三彩点：单元素 + box-shadow 画 3 个圆。 */
+  .xcode-dots {
+    @apply relative inline-block;
+    width: 52px;
+    height: 12px;
+  }
+  .xcode-dots::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 9999px;
+    background: #ff5f57;
+    box-shadow:
+      20px 0 0 #febc2e,
+      40px 0 0 #28c840;
+  }
+
+  .xcode-filename {
+    @apply text-foreground font-medium;
+  }
+  /* 语言标签靠右；无文件名时它仍靠右。 */
+  .xcode-lang {
+    @apply text-muted-foreground ml-auto tracking-wide uppercase;
+  }
+  /* 复制按钮：有语言标签时紧随其后；无语言标签时自身靠右。 */
+  .xcode-copy {
+    @apply text-muted-foreground hover:text-foreground ml-auto cursor-pointer rounded px-2 py-0.5;
+  }
+  .xcode-lang + .xcode-copy {
+    @apply ml-0;
+  }
+
+  .astro-code {
+    @apply bg-(--shiki-light-bg) text-(--shiki-light) [&_span]:text-(--shiki-light);
+  }
   html[data-theme="dark"] .astro-code {
     @apply bg-(--shiki-dark-bg) text-(--shiki-dark) [&_span]:text-(--shiki-dark);
   }
 
-  /* Styles for Shiki transformers */
-  /* https://shiki.style/packages/transformers */
+  /* 行号：CSS counter 画左侧 gutter，不增加 DOM。 */
+  .astro-code.line-numbers {
+    counter-reset: xcode-line;
+  }
+  .astro-code.line-numbers .line {
+    counter-increment: xcode-line;
+  }
+  .astro-code.line-numbers .line::before {
+    content: counter(xcode-line);
+    @apply text-muted-foreground/50 mr-4 inline-block w-8 pr-2 text-right select-none;
+  }
+
+  /* Shiki transformers 标记（diff/高亮），保持原样式。 */
   .astro-code {
     .line.diff.add {
       @apply relative inline-block w-full bg-green-400/20 before:absolute before:-left-3 before:text-green-500 before:content-['+'];
