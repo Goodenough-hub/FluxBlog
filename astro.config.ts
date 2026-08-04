@@ -8,12 +8,7 @@ import remarkCollapse from "remark-collapse";
 import rehypeCallouts from "rehype-callouts";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import {
-  transformerNotationDiff,
-  transformerNotationHighlight,
-  transformerNotationWordHighlight,
-} from "@shikijs/transformers";
-import { transformerFileName } from "./src/utils/transformers/fileName";
+import { shikiThemes, shikiTransformers } from "./src/utils/markdownPlugins";
 import remarkMermaid from "./src/utils/remark-mermaid";
 import config from "./astro-paper.config";
 
@@ -45,15 +40,10 @@ export default defineConfig({
       rehypePlugins: [rehypeCallouts, rehypeKatex],
     }),
     shikiConfig: {
-      themes: { light: "min-light", dark: "night-owl" },
+      themes: shikiThemes,
       defaultColor: false,
       wrap: false,
-      transformers: [
-        transformerFileName({ style: "v2", hideDot: false }),
-        transformerNotationHighlight(),
-        transformerNotationWordHighlight(),
-        transformerNotationDiff({ matchAlgorithm: "v3" }),
-      ],
+      transformers: shikiTransformers,
     },
   },
   vite: {

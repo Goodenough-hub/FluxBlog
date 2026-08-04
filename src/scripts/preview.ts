@@ -17,6 +17,9 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
 import { fetchAssetBlob } from "./api-client";
+import { shikiThemes, shikiTransformers } from "../utils/markdownPlugins";
+import { xcodeLight } from "../utils/themes/xcode-light";
+import { xcodeDark } from "../utils/themes/xcode-dark";
 
 // 预览对作者自有内容放宽 sanitize：允许 class/style（KaTeX 需要），允许 mermaid div。
 const schema = {
@@ -79,7 +82,7 @@ async function getHighlighter() {
   if (!highlighterPromise) {
     highlighterPromise = import("shiki").then(({ createHighlighter }) =>
       createHighlighter({
-        themes: ["min-light", "night-owl"],
+        themes: [xcodeLight, xcodeDark],
         langs: [
           "ts",
           "js",
@@ -181,7 +184,10 @@ export class PreviewRenderer {
           try {
             const out = hl.codeToHtml(code.textContent || "", {
               lang,
-              themes: { light: "min-light", dark: "night-owl" },
+              themes: shikiThemes,
+              defaultColor: false,
+              transformers: shikiTransformers,
+              meta: { __raw: "" },
             });
             pre.outerHTML = out;
           } catch {}
