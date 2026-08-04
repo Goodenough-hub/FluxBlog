@@ -39,4 +39,16 @@ describe("transformerCodeWindow", () => {
     const html = await render("x", { lang: "text" });
     expect(html).not.toContain("xcode-lang");
   });
+
+  it("同时有 file 和 lang 时都渲染，且 figure 内含 pre", async () => {
+    const html = await render("const a = 1;", { lang: "swift", meta: 'file="main.swift"' });
+    expect(html).toContain('class="xcode-filename">main.swift<');
+    expect(html).toContain('class="xcode-lang">swift<');
+    expect(html).toMatch(/<figure class="xcode-window">[\s\S]*<pre/);
+  });
+
+  it("文件名含空格不被截断", async () => {
+    const html = await render("x", { meta: 'file="my file.swift"' });
+    expect(html).toContain('class="xcode-filename">my file.swift<');
+  });
 });

@@ -8,9 +8,11 @@ describe("xcode themes", () => {
     expect(xcodeLight.name).toBe("xcode-light");
     expect(xcodeLight.type).toBe("light");
     expect(xcodeLight.colors?.["editor.background"]).toBe("#FFFFFF");
+    expect(xcodeLight.colors?.["editor.foreground"]).toBe("#1F1F24");
     expect(xcodeDark.name).toBe("xcode-dark");
     expect(xcodeDark.type).toBe("dark");
     expect(xcodeDark.colors?.["editor.background"]).toBe("#292A30");
+    expect(xcodeDark.colors?.["editor.foreground"]).toBe("#DFDFE0");
   });
 
   it("关键字/字符串/注释着 Xcode 色（defaultColor:false 时以 CSS 变量内联）", async () => {

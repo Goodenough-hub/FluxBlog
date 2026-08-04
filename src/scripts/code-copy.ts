@@ -31,14 +31,18 @@ document.addEventListener("click", async e => {
   if (!btn) return;
   const pre = btn.closest(".xcode-window")?.querySelector("pre");
   const text = pre?.textContent ?? "";
-  const prev = btn.textContent;
+  // 清除上一次未触发的复原计时器，避免连点时把「已复制」当作原始文案复原而卡住。
+  const prevTimer = btn.dataset.copyTimer;
+  if (prevTimer) window.clearTimeout(Number(prevTimer));
   try {
     await copyText(text);
     btn.textContent = "已复制";
   } catch {
     btn.textContent = "复制失败";
   }
-  window.setTimeout(() => {
-    btn.textContent = prev;
+  const id = window.setTimeout(() => {
+    btn.textContent = "复制";
+    delete btn.dataset.copyTimer;
   }, 1500);
+  btn.dataset.copyTimer = String(id);
 });

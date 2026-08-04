@@ -23,18 +23,16 @@ export const transformerCodeWindow = () => ({
     const lang =
       rawLang && rawLang !== "text" && rawLang !== "plaintext" ? rawLang : "";
 
-    // 文件名：解析 fence meta `file="main.swift"`
+    // 文件名：解析 fence meta `file="main.swift"`（正则支持含空格与不同引号）
     let file = "";
     const raw = this.options.meta?.__raw;
     if (raw) {
-      for (const item of raw.split(" ")) {
-        const [k, v] = item.split("=");
-        if (k === "file" && v) file = v.replace(/["'`]/g, "");
-      }
+      const m = raw.match(/\bfile\s*=\s*(["'`])(.*?)\1/);
+      if (m) file = m[2];
     }
 
     const titlebar = [
-      { type: "element", tagName: "span", properties: { class: "xcode-dots" }, children: [] },
+      { type: "element", tagName: "span", properties: { class: "xcode-dots", "aria-hidden": "true" }, children: [] },
     ];
     if (file) {
       titlebar.push({
