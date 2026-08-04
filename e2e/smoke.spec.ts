@@ -51,3 +51,17 @@ test("搜索页可用", async ({ page }) => {
   // 后端 ILIKE 返回 Card 列表
   await expect(page.locator("main ul li").first()).toBeVisible({ timeout: 15_000 });
 });
+
+test("文章代码块为 Xcode 窗口风（含行号/复制，需后端）", async ({ page }) => {
+  test.skip(!hasBackend, "需要 FLUXBLOG_E2E_BASE_URL 指向含代码块文章的站点");
+  // 通过内容组约定：首页第一篇文章通常含代码；按站点实际调整 slug。
+  await page.goto("./");
+  const firstPost = page.locator("a[href*='/blog/posts/']").first();
+  await firstPost.click();
+  const win = page.locator(".xcode-window").first();
+  await expect(win).toBeVisible();
+  await expect(win.locator(".xcode-dots")).toBeVisible();
+  await expect(win.locator(".xcode-copy")).toBeVisible();
+  // 行号 gutter：第一行 ::before 计数存在（检查 line 元素存在即可）
+  await expect(win.locator("pre.line-numbers .line").first()).toBeVisible();
+});
