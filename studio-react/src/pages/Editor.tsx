@@ -479,7 +479,7 @@ export default function EditorPage() {
         <section className="flex min-w-0 flex-1 flex-col border-r border-slate-200/80 dark:border-strokedark">
           <PaneHeader label="预览" hint="实时渲染发布态（remark/rehype + Shiki + KaTeX + Mermaid）" />
           <div className="min-h-0 flex-1 overflow-hidden bg-white dark:bg-boxdark">
-            <PreviewFrame markdown={markdown} />
+            <PreviewFrame draftId={draft.id} reloadKey={sc.savedVersion} />
           </div>
         </section>
         {/* 右：编辑 */}

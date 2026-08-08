@@ -67,6 +67,8 @@ export function useSaveController({
     draftIdRefForReset.current = draftId;
     lastSavedInputRef.current = null;
     pendingRef.current = null;
+    // 同步 savedVersion，让 PreviewFrame 的 reloadKey 跳到新草稿版本
+    setSavedVersion(baseVersion);
   }
 
   const setStateSafe = (s: SaveState) => {

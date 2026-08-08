@@ -61,6 +61,11 @@ export function getMyPrivatePost(slug: string, token: string): Promise<Post> {
   });
 }
 
+/** 取本人草稿（含正文，按 ID 查，用于工作室预览）。 */
+export function getDraft(id: number, token: string): Promise<Post> {
+  return fetchJSON<Post>(`/drafts/${id}`, { headers: authHeader(token) });
+}
+
 /** 列出所有 project（含公开文章数）。 */
 export function listPublicProjects(): Promise<ProjectSummary[]> {
   return fetchJSON<ProjectSummary[]>("/projects");

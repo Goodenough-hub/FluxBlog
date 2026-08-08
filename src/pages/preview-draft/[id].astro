@@ -1,0 +1,82 @@
+---
+import PostLayout from "@/layouts/PostLayout.astro";
+import Header from "@/components/Header.astro";
+import BackToTopButton from "@/pages/posts/[...slug]/_components/BackToTopButton.astro";
+import { getDraft } from "@/utils/blogApi";
+import { renderMarkdown } from "@/utils/renderMarkdown";
+import config from "@/config";
+
+// 工作室预览：按 ID 取本人草稿并按发布态渲染，复用 PostLayout 全套 CSS/JS，
+// 所见即发布。未登录/401 → 401 状态码（让 iframe 静默重试，不打断编辑）。
+export const prerender = false;
+
+const idParam = Astro.params.id;
+const id = Number(idParam);
+if (!idParam || !Number.isFinite(id) || id <= 0) {
+  return new Response("Not Found", { status: 404 });
+}
+
+const token = Astro.cookies.get("fluxblog_token")?.value;
+if (!token) {
+  return new Response("Unauthorized", { status: 401 });
+}
+
+let post;
+try {
+  post = await getDraft(id, token);
+} catch (err: any) {
+  return new Response(err?.message || "draft load failed", {
+    status: err?.status === 404 ? 404 : 401,
+  });
+}
+if (!post) {
+  return new Response("Not Found", { status: 404 });
+}
+
+const html = await renderMarkdown(post.markdown);
+const { title, description, updatedAt, tags } = post;
+---
+
+<PostLayout
+  title={`预览：${title} | ${config.site.title}`}
+  description={description}
+  updatedAt={updatedAt ? new Date(updatedAt) : undefined}
+>
+  <Fragment slot="head">
+    <meta name="robots" content="noindex" />
+  </Fragment>
+
+  <Header />
+
+  <main
+    id="main-content"
+    class:list={["app-layout", "mt-8"]}
+    data-pagefind-ignore
+  >
+    <h1 class="text-accent inline-block text-2xl font-bold sm:text-3xl">
+      {title}
+    </h1>
+
+    <div class="my-2 flex items-center gap-2 text-sm text-slate-400">
+      <span>草稿预览（v{post.version}）</span>
+      {post.visibility === "private" && (
+        <span class="text-amber-500">🔒 仅自己可见</span>
+      )}
+    </div>
+
+    <article
+      id="article"
+      class:list={[
+        "mt-8 w-full",
+        "app-prose max-w-app",
+        "prose-pre:bg-(--shiki-light-bg) dark:prose-pre:bg-(--shiki-dark-bg)",
+      ]}
+      set:html={html}
+    >
+    </article>
+
+    <hr class="my-8 border-dashed" />
+
+    <BackToTopButton />
+  </main>
+</PostLayout>
