@@ -33,7 +33,7 @@ interface UseSaveControllerOptions {
 export function useSaveController({
   draftId,
   baseVersion,
-  debounceMs = 1500,
+  debounceMs = 3000,
   onConflict,
 }: UseSaveControllerOptions) {
   const [state, setState] = useState<SaveState>("idle");
