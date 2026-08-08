@@ -107,9 +107,16 @@ const ogImage = ogImageUrl
 
     <BackToTopButton />
 
-    <ul class="mt-4 mb-8 flex flex-wrap gap-4 sm:my-8">
-      {tags.map(tag => <Tag tag={slugifyStr(tag)} tagName={tag} size="sm" />)}
-    </ul>
+    {tags.length > 0 && (
+      <section class="mt-4 mb-8 flex flex-wrap items-center gap-x-3 gap-y-2 sm:my-8">
+        <span class="text-sm font-medium uppercase tracking-wide text-foreground/60">
+          标签
+        </span>
+        <ul class="flex flex-wrap gap-3">
+          {tags.map(tag => <Tag tag={slugifyStr(tag)} tagName={tag} size="sm" />)}
+        </ul>
+      </section>
+    )}
 
     <ShareLinks />
 
