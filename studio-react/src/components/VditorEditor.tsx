@@ -13,8 +13,8 @@ export interface VditorEditorProps {
 }
 
 // React 包装 Vditor：
-// - mode='wysiwyg'（富文本所见即所得，避免 ir 模式下代码块 expand 时
-//   marker--pre + vditor-ir__preview 双 pre 重复显示）
+// - mode='sv'（split-view 源码模式）：代码块直接显示 ```python … ```
+//   原文，不渲染富文本，避免 ir/wysiwyg 下代码块双 pre 重复
 // - 关闭内置 preview（左预览由 PreviewFrame 走 FluxBlog 发布态渲染管线）
 // - upload.handler 接 image-utils 的 WebP/EXIF 预处理 + cookie 上传
 // - theme 跟随 html[data-theme]（与 Antd 一致，由 MutationObserver 同步）
@@ -42,7 +42,7 @@ export default function VditorEditor({
       document.documentElement.classList.contains("dark");
 
     const vditor = new Vditor(root, {
-      mode: "wysiwyg",
+      mode: "sv",
       value,
       height: "100%",
       width: "100%",
