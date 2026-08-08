@@ -79,4 +79,37 @@ const { title, description, updatedAt, tags } = post;
 
     <BackToTopButton />
   </main>
+
+  <!-- 工作室预览：禁用所有链接跳转，仅作展示用。正常 /blog/posts/<slug> 不受影响。 -->
+  <script is:inline>
+    document.addEventListener(
+      "click",
+      function (e) {
+        var t = e.target;
+        var el = t && t.closest ? t.closest("a") : null;
+        if (el) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      },
+      true
+    );
+    document.addEventListener(
+      "auxclick",
+      function (e) {
+        var t = e.target;
+        var el = t && t.closest ? t.closest("a") : null;
+        if (el) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      },
+      true
+    );
+    document.addEventListener("contextmenu", function (e) {
+      var t = e.target;
+      var el = t && t.closest ? t.closest("a") : null;
+      if (el) e.preventDefault();
+    });
+  </script>
 </PostLayout>
