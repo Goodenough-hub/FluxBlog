@@ -177,6 +177,25 @@ export const draftsApi = {
       body: JSON.stringify({ ...input, baseVersion }),
     });
   },
+  // 单独切换可见性：未发布草稿走 PATCH（仅传 visibility+baseVersion）；
+  // 已发布草稿走 POST /publish（服务端会原地把 visibility 改成入参值）
+  async setVisibility(
+    id: number,
+    visibility: "public" | "private",
+    baseVersion: number,
+    isPublished: boolean
+  ): Promise<Draft> {
+    if (isPublished) {
+      return api<Draft>(`/drafts/${id}/publish`, {
+        method: "POST",
+        body: JSON.stringify({ visibility }),
+      });
+    }
+    return api<Draft>(`/drafts/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ visibility, baseVersion }),
+    });
+  },
   async delete(id: number): Promise<void> {
     await api<{ ok: boolean }>(`/drafts/${id}`, { method: "DELETE" });
   },

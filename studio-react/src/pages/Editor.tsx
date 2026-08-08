@@ -215,7 +215,7 @@ export default function EditorPage() {
             slug,
             title: v.title,
             markdown: "",
-            visibility: "private",
+            visibility: "public",
           });
           break;
         } catch (e: any) {
@@ -283,22 +283,54 @@ export default function EditorPage() {
         return;
       }
       const isPublished = draft.status === "published";
+
+      // 公开/私有发布分流：私有草稿发布前确认是否设为公开
+      // （私有发布不会出现在公开站点，仅自己私有列表可见）
+      let targetVisibility = draft.visibility;
+      if (!isPublished && draft.visibility === "private") {
+        const choice = await new Promise<"public" | "private" | "cancel">(
+          (resolve) => {
+            modal.confirm({
+              title: "设为公开并发布？",
+              content:
+                "当前草稿是「仅自己可见」。设为公开后任何人可访问 /blog/posts/<slug>；保持私有则只在你的私有列表可见。",
+              okText: "公开并发布",
+              cancelText: "保持私有发布",
+              onOk: () => resolve("public"),
+              onCancel: () => resolve("private"),
+            });
+          }
+        );
+        if (choice === "cancel") {
+          setPublishLoading(false);
+          return;
+        }
+        targetVisibility = choice;
+        // 同步本地 meta，避免下次保存又写回 private
+        setMeta((m) => (m ? { ...m, visibility: choice } : m));
+      }
+
       if (isPublished) {
         await draftsApi.unpublish(draft.id);
-        notification.success({ message: "已撤回" });
+        notification.success({ message: "已撤回，回到草稿列表" });
       } else {
-        await draftsApi.publish(draft.id, draft.visibility);
-        notification.success({ message: "已提交发布任务" });
+        await draftsApi.publish(draft.id, targetVisibility);
+        notification.success({
+          message:
+            targetVisibility === "public"
+              ? `已公开发布：/blog/posts/${draft.slug}`
+              : `已私有发布（仅自己可见）`,
+          duration: 4,
+        });
       }
-      // 重新加载 draft
-      const updated = await draftsApi.get(draft.id);
-      setDraft(updated);
+      // 发布/撤回完成，回主列表
+      navigate("/");
     } catch (e: any) {
       message.error(e.message);
     } finally {
       setPublishLoading(false);
     }
-  }, [draft, sc, message, notification]);
+  }, [draft, sc, message, modal, notification, navigate]);
 
   // 历史恢复
   const onRestore = useCallback(

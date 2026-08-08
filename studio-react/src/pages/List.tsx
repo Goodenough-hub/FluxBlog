@@ -57,12 +57,18 @@ export default function ListPage() {
   const [loading, setLoading] = useState(true);
   const [batchDeleteLoading, setBatchDeleteLoading] = useState(false);
   const [publishLoadingId, setPublishLoadingId] = useState<number | null>(null);
+  const [visibilityLoadingId, setVisibilityLoadingId] = useState<number | null>(
+    null
+  );
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
   // 筛选
   const [searchTitle, setSearchTitle] = useState("");
   const [filterProject, setFilterProject] = useState<number | null>(null);
   const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [filterVisibility, setFilterVisibility] = useState<
+    "all" | "public" | "private"
+  >("all");
 
   useEffect(() => {
     if (ready && !loggedIn) {
@@ -109,14 +115,17 @@ export default function ListPage() {
       }
       if (filterProject != null && d.projectId !== filterProject) return false;
       if (filterTag && !(d.tags || []).includes(filterTag)) return false;
+      if (filterVisibility !== "all" && d.visibility !== filterVisibility)
+        return false;
       return true;
     });
-  }, [drafts, searchTitle, filterProject, filterTag]);
+  }, [drafts, searchTitle, filterProject, filterTag, filterVisibility]);
 
   const resetFilters = () => {
     setSearchTitle("");
     setFilterProject(null);
     setFilterTag(null);
+    setFilterVisibility("all");
   };
 
   const delDraft = useCallback(
@@ -158,18 +167,62 @@ export default function ListPage() {
     setPublishLoadingId(draft.id);
     try {
       const isPublished = draft.status === "published";
+      let targetVisibility = draft.visibility;
+      if (!isPublished && draft.visibility === "private") {
+        const choice = await new Promise<"public" | "private" | "cancel">(
+          (resolve) => {
+            modal.confirm({
+              title: "设为公开并发布？",
+              content:
+                "当前草稿是「仅自己可见」。设为公开后任何人可访问；保持私有则只在你的私有列表可见。",
+              okText: "公开并发布",
+              cancelText: "保持私有发布",
+              onOk: () => resolve("public"),
+              onCancel: () => resolve("private"),
+            });
+          }
+        );
+        if (choice === "cancel") {
+          setPublishLoadingId(null);
+          return;
+        }
+        targetVisibility = choice;
+      }
       if (isPublished) {
         await draftsApi.unpublish(draft.id);
         notification.success({ message: "已撤回" });
       } else {
-        await draftsApi.publish(draft.id, draft.visibility);
-        notification.success({ message: "已发布" });
+        await draftsApi.publish(draft.id, targetVisibility);
+        notification.success({
+          message:
+            targetVisibility === "public"
+              ? `已公开发布：/blog/posts/${draft.slug}`
+              : "已私有发布（仅自己可见）",
+          duration: 4,
+        });
       }
       await load();
     } catch (e: any) {
       message.error(e.message);
     } finally {
       setPublishLoadingId(null);
+    }
+  };
+
+  const toggleVisibility = async (draft: Draft) => {
+    setVisibilityLoadingId(draft.id);
+    try {
+      const next = draft.visibility === "public" ? "private" : "public";
+      const isPublished = draft.status === "published";
+      await draftsApi.setVisibility(draft.id, next, draft.version, isPublished);
+      notification.success({
+        message: `已切换为${next === "public" ? "公开" : "仅自己可见"}`,
+      });
+      await load();
+    } catch (e: any) {
+      message.error(e.message);
+    } finally {
+      setVisibilityLoadingId(null);
     }
   };
 
@@ -251,11 +304,6 @@ export default function ListPage() {
         render: (s: string, r) => (
           <span className="inline-flex items-center gap-1">
             <StatusBadge status={s} />
-            {r.visibility === "private" && (
-              <Tooltip title="仅自己可见">
-                <FiEyeOff size={12} className="text-slate-400" />
-              </Tooltip>
-            )}
             {r.hasUnpublishedChanges && (
               <Tooltip title="有未发布修改">
                 <span className="text-amber-500">●</span>
@@ -263,6 +311,42 @@ export default function ListPage() {
             )}
           </span>
         ),
+      },
+      {
+        title: "可见性",
+        dataIndex: "visibility",
+        key: "visibility",
+        width: 110,
+        render: (vis: string, r) => {
+          const isPublic = vis === "public";
+          const loading = visibilityLoadingId === r.id;
+          return (
+            <Tooltip
+              title={
+                isPublic
+                  ? "公开 — 点击切为仅自己可见"
+                  : "仅自己可见 — 点击切为公开"
+              }
+            >
+              <button
+                type="button"
+                disabled={loading}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void toggleVisibility(r);
+                }}
+                className={`inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                  isPublic
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400"
+                    : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-strokedark dark:bg-boxdark-2 dark:text-slate-400"
+                }`}
+              >
+                {isPublic ? <FiEye size={12} /> : <FiEyeOff size={12} />}
+                {isPublic ? "公开" : "私有"}
+              </button>
+            </Tooltip>
+          );
+        },
       },
       {
         title: "版本",
@@ -373,7 +457,7 @@ export default function ListPage() {
         ),
       },
     ],
-    [navigate, publishLoadingId, togglePublish, delDraft]
+    [navigate, publishLoadingId, visibilityLoadingId, togglePublish, toggleVisibility, delDraft]
   );
 
   const rowSelection: TableRowSelection<Draft> = {
@@ -385,7 +469,8 @@ export default function ListPage() {
   if (!loggedIn) return null;
 
   const selectedCount = selectedRowKeys.length;
-  const hasFilter = searchTitle || filterProject != null || filterTag;
+  const hasFilter =
+    searchTitle || filterProject != null || filterTag || filterVisibility !== "all";
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 text-slate-600 dark:bg-boxdark dark:text-slate-300">
@@ -438,6 +523,16 @@ export default function ListPage() {
                 onChange={(v) => setFilterTag(v ?? null)}
                 options={allTags.map((t) => ({ label: t, value: t }))}
                 className="w-full sm:w-32"
+              />
+              <Select
+                value={filterVisibility}
+                onChange={(v) => setFilterVisibility(v as "all" | "public" | "private")}
+                options={[
+                  { value: "public", label: "公开" },
+                  { value: "private", label: "私有" },
+                  { value: "all", label: "全部" },
+                ]}
+                className="w-full sm:w-28"
               />
               <Tooltip title="重置筛选">
                 <Button
