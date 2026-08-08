@@ -61,7 +61,7 @@ export default function PublishModal({
       });
       setScheduleEnabled(false);
       setNewProjectName("");
-      setTagSearch("");
+      setNewTagName("");
     }
   }, [open, draft, form]);
 
@@ -118,19 +118,19 @@ export default function PublishModal({
     [allTags, draft.tags]
   );
 
-  const [tagSearch, setTagSearch] = useState("");
-  const trimmedTagSearch = tagSearch.trim();
+  const [newTagName, setNewTagName] = useState("");
+  const trimmedNewTag = newTagName.trim();
   const canCreateTag =
-    trimmedTagSearch.length > 0 &&
-    !tagOptions.some((o) => o.value === trimmedTagSearch);
+    trimmedNewTag.length > 0 &&
+    !tagOptions.some((o) => o.value === trimmedNewTag);
 
   const handleCreateTag = () => {
     if (!canCreateTag) return;
     const current = (form.getFieldValue("tags") as string[] | undefined) ?? [];
-    if (!current.includes(trimmedTagSearch)) {
-      form.setFieldValue("tags", [...current, trimmedTagSearch]);
+    if (!current.includes(trimmedNewTag)) {
+      form.setFieldValue("tags", [...current, trimmedNewTag]);
     }
-    setTagSearch("");
+    setNewTagName("");
   };
 
   const projectOptions = projects.map((p) => ({ value: p.id, label: p.name }));
@@ -203,30 +203,34 @@ export default function PublishModal({
         >
           <Select
             mode="tags"
-            placeholder="选择已有或输入新标签，回车新建"
+            placeholder="选择已有或输入新标签"
             tokenSeparators={[",", "，"]}
             options={tagOptions}
-            searchValue={tagSearch}
-            onSearch={setTagSearch}
             className="w-full"
             dropdownRender={(menu) => (
               <>
                 {menu}
-                {canCreateTag && (
-                  <>
-                    <Divider style={{ margin: "8px 0" }} />
-                    <div className="px-1 pb-1">
-                      <Button
-                        type="text"
-                        icon={<FiPlus size={14} />}
-                        onClick={handleCreateTag}
-                        block
-                      >
-                        新建标签：{trimmedTagSearch}
-                      </Button>
-                    </div>
-                  </>
-                )}
+                <Divider style={{ margin: "8px 0" }} />
+                <div className="flex items-center gap-2 px-1 pb-1">
+                  <Input
+                    placeholder="新建标签名称"
+                    value={newTagName}
+                    onChange={(e) => setNewTagName(e.target.value)}
+                    onPressEnter={(e) => {
+                      e.preventDefault();
+                      handleCreateTag();
+                    }}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="text"
+                    icon={<FiPlus size={14} />}
+                    onClick={handleCreateTag}
+                    disabled={!canCreateTag}
+                  >
+                    新建
+                  </Button>
+                </div>
               </>
             )}
           />
