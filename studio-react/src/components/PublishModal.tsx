@@ -61,6 +61,7 @@ export default function PublishModal({
       });
       setScheduleEnabled(false);
       setNewProjectName("");
+      setTagSearch("");
     }
   }, [open, draft, form]);
 
@@ -116,6 +117,21 @@ export default function PublishModal({
     () => Array.from(new Set([...allTags, ...(draft.tags ?? [])])).map((t) => ({ value: t, label: t })),
     [allTags, draft.tags]
   );
+
+  const [tagSearch, setTagSearch] = useState("");
+  const trimmedTagSearch = tagSearch.trim();
+  const canCreateTag =
+    trimmedTagSearch.length > 0 &&
+    !tagOptions.some((o) => o.value === trimmedTagSearch);
+
+  const handleCreateTag = () => {
+    if (!canCreateTag) return;
+    const current = (form.getFieldValue("tags") as string[] | undefined) ?? [];
+    if (!current.includes(trimmedTagSearch)) {
+      form.setFieldValue("tags", [...current, trimmedTagSearch]);
+    }
+    setTagSearch("");
+  };
 
   const projectOptions = projects.map((p) => ({ value: p.id, label: p.name }));
 
@@ -187,10 +203,32 @@ export default function PublishModal({
         >
           <Select
             mode="tags"
-            placeholder="输入后回车，逗号风格"
+            placeholder="选择已有或输入新标签，回车新建"
             tokenSeparators={[",", "，"]}
             options={tagOptions}
+            searchValue={tagSearch}
+            onSearch={setTagSearch}
             className="w-full"
+            dropdownRender={(menu) => (
+              <>
+                {menu}
+                {canCreateTag && (
+                  <>
+                    <Divider style={{ margin: "8px 0" }} />
+                    <div className="px-1 pb-1">
+                      <Button
+                        type="text"
+                        icon={<FiPlus size={14} />}
+                        onClick={handleCreateTag}
+                        block
+                      >
+                        新建标签：{trimmedTagSearch}
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           />
         </Form.Item>
 
