@@ -192,7 +192,7 @@ export default function ListPage() {
         await draftsApi.unpublish(draft.id);
         notification.success({ message: "已撤回" });
       } else {
-        await draftsApi.publish(draft.id, targetVisibility);
+        await draftsApi.publish(draft.id, { visibility: targetVisibility });
         notification.success({
           message:
             targetVisibility === "public"

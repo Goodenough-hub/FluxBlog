@@ -25,6 +25,9 @@ interface UseSaveControllerOptions {
   baseVersion: number;
   debounceMs?: number;
   onConflict?: (info: ConflictInfo) => void;
+  /** 加载草稿后传入与服务端一致的 input，用作 lastSavedInputRef 初值，
+   *  避免用户重新进入编辑器但未做任何修改时仍触发 15s 自动保存。 */
+  seededInput?: SaveInput | null;
 }
 
 // 自动保存 hook：15s 防抖 + 严格 single-flight + 乐观锁 + IndexedDB 快照。
@@ -35,6 +38,7 @@ export function useSaveController({
   baseVersion,
   debounceMs = 15000,
   onConflict,
+  seededInput,
 }: UseSaveControllerOptions) {
   const [state, setState] = useState<SaveState>("idle");
   const [lastError, setLastError] = useState<string | null>(null);
@@ -53,6 +57,9 @@ export function useSaveController({
   // 避免"在途保存返回新版后、下一次 pump 仍用旧 baseVersion 触发 409"的竞态
   const baseVersionRef = useRef(baseVersion);
   baseVersionRef.current = baseVersion;
+  // seededInput 通过 ref 同步，draftId 切换时用它初始化 lastSavedInputRef
+  const seededInputRef = useRef<SaveInput | null>(seededInput ?? null);
+  seededInputRef.current = seededInput ?? null;
 
   const inputKey = (i: SaveInput): string =>
     `${i.title}${i.slug}${i.tags.join(",")}${i.description}${i.cover}${i.markdown}${i.visibility}${i.projectId ?? ""}`;
@@ -61,11 +68,13 @@ export function useSaveController({
     stateRef.current = state;
   }, [state]);
 
-  // 切换 draft 时清掉 lastSavedInput，避免新 draft 第一笔保存被误判为"无变化"
+  // 切换 draft 时清掉 lastSavedInput，避免新 draft 第一笔保存被误判为"无变化"。
+  // 但若调用方提供了与当前 draft 一致的 seededInput（如刚从服务端加载），
+  // 则用它初始化 lastSavedInputRef，让 schedule() 检测到无变化时跳过自动保存。
   const draftIdRefForReset = useRef(draftId);
   if (draftIdRefForReset.current !== draftId) {
     draftIdRefForReset.current = draftId;
-    lastSavedInputRef.current = null;
+    lastSavedInputRef.current = seededInputRef.current;
     pendingRef.current = null;
     // 同步 savedVersion，让 PreviewFrame 的 reloadKey 跳到新草稿版本
     setSavedVersion(baseVersion);

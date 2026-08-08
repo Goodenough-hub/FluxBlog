@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Button,
@@ -17,12 +17,14 @@ import {
   FiSettings,
   FiUploadCloud,
   FiArrowDownCircle,
+  FiRefreshCw,
 } from "react-icons/fi";
 import dayjs from "dayjs";
 import { useAuth } from "../hooks/useAuth";
 import {
   draftsApi,
   projectsApi,
+  tagsApi,
   type Draft,
   type Project,
 } from "../api/client";
@@ -35,6 +37,7 @@ import PreviewFrame from "../components/PreviewFrame";
 import MetaDrawer, { type MetaFormValue } from "../components/MetaDrawer";
 import HistoryDrawer from "../components/HistoryDrawer";
 import ConflictModal, { type ConflictInfo } from "../components/ConflictModal";
+import PublishModal, { type PublishFormValue } from "../components/PublishModal";
 
 const STATUS_COLOR: Record<string, string> = {
   draft: "default",
@@ -62,12 +65,14 @@ export default function EditorPage() {
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [allTags, setAllTags] = useState<string[]>([]);
   const [markdown, setMarkdown] = useState("");
   const [meta, setMeta] = useState<MetaFormValue | null>(null);
   const [baseVersion, setBaseVersion] = useState(0);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [metaDrawerOpen, setMetaDrawerOpen] = useState(false);
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newForm] = Form.useForm<{ title: string }>();
@@ -85,6 +90,7 @@ export default function EditorPage() {
   useEffect(() => {
     if (!loggedIn) return;
     projectsApi.list().then(setProjects).catch(() => {});
+    tagsApi.list().then(setAllTags).catch(() => {});
   }, [loggedIn]);
 
   const buildSaveInput = useCallback(
@@ -105,10 +111,18 @@ export default function EditorPage() {
     setConflict(info);
   }, []);
 
+  // seededInput：草稿加载后用与服务端一致的 input 初始化 lastSavedInputRef，
+  // 让 useSaveController 在用户未做任何修改时不触发 15s 自动保存。
+  const seededInput = useMemo<SaveInput | null>(() => {
+    if (!draft || !meta) return null;
+    return buildSaveInput(markdown, meta);
+  }, [draft, meta, markdown, buildSaveInput]);
+
   const sc = useSaveController({
     draftId: draft?.id ?? 0,
     baseVersion,
     onConflict,
+    seededInput,
   });
 
   // 切草稿时重置状态
@@ -269,67 +283,93 @@ export default function EditorPage() {
     [draft, sc, message, notification]
   );
 
-  // 发布 / 撤回
-  const onPublish = useCallback(async () => {
-    if (!draft) return;
-    setPublishLoading(true);
-    try {
-      // 先 flush 自动保存
+  // 发布确认（PublishModal onConfirm）：flush 自动保存后调 publish API。
+  // 支持立即发布与定时发布；定时发布时 status 保持 draft，由后端 scheduler 到点提升。
+  const onPublishConfirm = useCallback(
+    async (values: PublishFormValue) => {
+      if (!draft) return;
+      setPublishLoading(true);
       try {
-        await sc.flush();
-      } catch {
-        message.error("有未保存的冲突，请先解决版本冲突再发布");
-        setPublishLoading(false);
-        return;
-      }
-      const isPublished = draft.status === "published";
-
-      // 公开/私有发布分流：私有草稿发布前确认是否设为公开
-      // （私有发布不会出现在公开站点，仅自己私有列表可见）
-      let targetVisibility = draft.visibility;
-      if (!isPublished && draft.visibility === "private") {
-        const choice = await new Promise<"public" | "private" | "cancel">(
-          (resolve) => {
-            modal.confirm({
-              title: "设为公开并发布？",
-              content:
-                "当前草稿是「仅自己可见」。设为公开后任何人可访问 /blog/posts/<slug>；保持私有则只在你的私有列表可见。",
-              okText: "公开并发布",
-              cancelText: "保持私有发布",
-              onOk: () => resolve("public"),
-              onCancel: () => resolve("private"),
-            });
-          }
-        );
-        if (choice === "cancel") {
-          setPublishLoading(false);
+        try {
+          await sc.flush();
+        } catch {
+          message.error("有未保存的冲突，请先解决版本冲突再发布");
           return;
         }
-        targetVisibility = choice;
-        // 同步本地 meta，避免下次保存又写回 private
-        setMeta((m) => (m ? { ...m, visibility: choice } : m));
-      }
-
-      if (isPublished) {
-        await draftsApi.unpublish(draft.id);
-        notification.success({ message: "已撤回，回到草稿列表" });
-      } else {
-        await draftsApi.publish(draft.id, targetVisibility);
-        notification.success({
-          message:
-            targetVisibility === "public"
-              ? `已公开发布：/blog/posts/${draft.slug}`
-              : `已私有发布（仅自己可见）`,
-          duration: 4,
+        const res = await draftsApi.publish(draft.id, {
+          visibility: values.visibility,
+          scheduledPublishAt: values.scheduledPublishAt,
+          projectId: values.projectId,
+          tags: values.tags,
         });
+        // 同步本地 meta，避免下次保存又写回旧值
+        setMeta((m) =>
+          m
+            ? {
+                ...m,
+                visibility: values.visibility,
+                projectId: values.projectId ?? null,
+                tags: values.tags,
+              }
+            : m
+        );
+        // 若新建了项目或改了项目，刷新 projects 列表（PublishModal 已通过 onProjectCreated 上报）
+        if (values.scheduledPublishAt) {
+          const when = dayjs(values.scheduledPublishAt).format("YYYY-MM-DD HH:mm");
+          notification.success({
+            message: `已设置定时发布：${when}`,
+            duration: 4,
+          });
+        } else if (res.scheduled) {
+          notification.success({ message: "已设置定时发布", duration: 4 });
+        } else {
+          notification.success({
+            message:
+              values.visibility === "public"
+                ? `已公开发布：/blog/posts/${draft.slug}`
+                : `已私有发布（仅自己可见）`,
+            duration: 4,
+          });
+        }
+        setPublishModalOpen(false);
+        navigate("/");
+      } catch (e: any) {
+        message.error(e.message);
+      } finally {
+        setPublishLoading(false);
       }
-      // 发布/撤回完成，回主列表
-      navigate("/");
-    } catch (e: any) {
-      message.error(e.message);
-    } finally {
-      setPublishLoading(false);
-    }
+    },
+    [draft, sc, message, notification, navigate]
+  );
+
+  // 撤回：弹二次确认 → flush → unpublish API
+  const onUnpublish = useCallback(async () => {
+    if (!draft) return;
+    modal.confirm({
+      title: "撤回文章",
+      content: "撤回后博客将不再显示此文章，确定撤回？",
+      okText: "确定撤回",
+      okType: "danger",
+      cancelText: "取消",
+      onOk: async () => {
+        setPublishLoading(true);
+        try {
+          try {
+            await sc.flush();
+          } catch {
+            message.error("有未保存的冲突，请先解决版本冲突再撤回");
+            return;
+          }
+          await draftsApi.unpublish(draft.id);
+          notification.success({ message: "已撤回，回到草稿列表" });
+          navigate("/");
+        } catch (e: any) {
+          message.error(e.message);
+        } finally {
+          setPublishLoading(false);
+        }
+      },
+    });
   }, [draft, sc, message, modal, notification, navigate]);
 
   // 历史恢复
@@ -411,6 +451,7 @@ export default function EditorPage() {
   }
 
   const isPublished = draft.status === "published";
+  const needsRepublish = isPublished && draft.hasUnpublishedChanges === true;
 
   return (
     <div className="flex h-screen flex-col bg-slate-50 text-slate-700 dark:bg-boxdark dark:text-slate-300">
@@ -463,14 +504,44 @@ export default function EditorPage() {
             onClick={() => setMetaDrawerOpen(true)}
           />
         </Tooltip>
-        <Button
-          type={isPublished ? "default" : "primary"}
-          icon={isPublished ? <FiArrowDownCircle size={14} /> : <FiUploadCloud size={14} />}
-          onClick={onPublish}
-          loading={publishLoading}
-        >
-          {isPublished ? "撤回" : "发布"}
-        </Button>
+        {needsRepublish ? (
+          <>
+            <Button
+              type="primary"
+              icon={<FiRefreshCw size={14} />}
+              onClick={() => setPublishModalOpen(true)}
+              loading={publishLoading}
+            >
+              更新发布
+            </Button>
+            <Button
+              type="default"
+              icon={<FiArrowDownCircle size={14} />}
+              onClick={onUnpublish}
+              loading={publishLoading}
+            >
+              撤回
+            </Button>
+          </>
+        ) : isPublished ? (
+          <Button
+            type="default"
+            icon={<FiArrowDownCircle size={14} />}
+            onClick={onUnpublish}
+            loading={publishLoading}
+          >
+            撤回
+          </Button>
+        ) : (
+          <Button
+            type="primary"
+            icon={<FiUploadCloud size={14} />}
+            onClick={() => setPublishModalOpen(true)}
+            loading={publishLoading}
+          >
+            发布
+          </Button>
+        )}
       </header>
 
       {/* 主区：左预览 + 右编辑 */}
@@ -515,6 +586,17 @@ export default function EditorPage() {
         onUseServer={onUseServer}
         onKeepLocal={onKeepLocal}
         onCancel={() => setConflict(null)}
+      />
+      <PublishModal
+        open={publishModalOpen}
+        onClose={() => setPublishModalOpen(false)}
+        onConfirm={onPublishConfirm}
+        draft={draft}
+        projects={projects}
+        allTags={allTags}
+        isRepublish={needsRepublish}
+        loading={publishLoading}
+        onProjectCreated={(p) => setProjects((prev) => [...prev, p])}
       />
     </div>
   );

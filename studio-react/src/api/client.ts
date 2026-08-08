@@ -136,6 +136,7 @@ export interface Draft {
   projectId?: number | null;
   publishedVersion?: number | null;
   hasUnpublishedChanges?: boolean;
+  scheduledPublishAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -217,11 +218,25 @@ export const draftsApi = {
   },
   async publish(
     id: number,
-    visibility?: "public" | "private"
-  ): Promise<{ status: string; noop?: boolean }> {
+    options?: {
+      visibility?: "public" | "private";
+      scheduledPublishAt?: string | null;
+      projectId?: number | null;
+      tags?: string[];
+    }
+  ): Promise<{
+    status: string;
+    noop?: boolean;
+    scheduled?: boolean;
+    scheduledPublishAt?: string;
+    visibility?: string;
+    publishedVersion?: number;
+    publishedAt?: string;
+    updatedAt?: string;
+  }> {
     return api(`/drafts/${id}/publish`, {
       method: "POST",
-      body: JSON.stringify({ visibility }),
+      body: JSON.stringify(options ?? {}),
     });
   },
   async unpublish(id: number): Promise<{ status: string; noop?: boolean }> {
@@ -229,9 +244,22 @@ export const draftsApi = {
   },
 };
 
+export const tagsApi = {
+  async list(): Promise<string[]> {
+    const r = await api<{ tags: string[] | null }>("/tags");
+    return r.tags ?? [];
+  },
+};
+
 export const projectsApi = {
   async list(): Promise<Project[]> {
     return api<Project[]>("/projects");
+  },
+  async create(input: { name: string; intro?: string }): Promise<Project> {
+    return api<Project>("/projects", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   },
 };
 
