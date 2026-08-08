@@ -112,7 +112,7 @@ export default function EditorPage() {
   }, []);
 
   // seededInput：草稿加载后用与服务端一致的 input 初始化 lastSavedInputRef，
-  // 让 useSaveController 在用户未做任何修改时不触发 15s 自动保存。
+  // 让 useSaveController 在用户未做任何修改时不触发 8s 自动保存。
   const seededInput = useMemo<SaveInput | null>(() => {
     if (!draft || !meta) return null;
     return buildSaveInput(markdown, meta);

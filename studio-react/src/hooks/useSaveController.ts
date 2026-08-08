@@ -26,17 +26,17 @@ interface UseSaveControllerOptions {
   debounceMs?: number;
   onConflict?: (info: ConflictInfo) => void;
   /** 加载草稿后传入与服务端一致的 input，用作 lastSavedInputRef 初值，
-   *  避免用户重新进入编辑器但未做任何修改时仍触发 15s 自动保存。 */
+   *  避免用户重新进入编辑器但未做任何修改时仍触发 8s 自动保存。 */
   seededInput?: SaveInput | null;
 }
 
-// 自动保存 hook：15s 防抖 + 严格 single-flight + 乐观锁 + IndexedDB 快照。
+// 自动保存 hook：8s 防抖 + 严格 single-flight + 乐观锁 + IndexedDB 快照。
 // 冲突（HTTP 409）→ 进入 blocked 态，pending 保留供解决后重试；调
 // resolveConflict() 恢复 idle。其他错误进入 error 态，可重试。
 export function useSaveController({
   draftId,
   baseVersion,
-  debounceMs = 15000,
+  debounceMs = 8000,
   onConflict,
   seededInput,
 }: UseSaveControllerOptions) {
