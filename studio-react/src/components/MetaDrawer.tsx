@@ -39,7 +39,6 @@ export default function MetaDrawer({
     if (open) {
       form.setFieldsValue({
         title: draft.title || "",
-        slug: draft.slug || "",
         tags: draft.tags || [],
         description: draft.description || "",
         cover: draft.cover || "",
@@ -72,18 +71,15 @@ export default function MetaDrawer({
           <Input placeholder="文章标题" />
         </Form.Item>
 
-        <Form.Item
-          label={<Label icon={<FiLink size={13} />} text="slug" />}
-          name="slug"
-          rules={[
-            { required: true, message: "slug 必填" },
-            {
-              pattern: /^[a-z0-9一-龥]+(-[a-z0-9一-龥]+)*$/,
-              message: "中文/小写字母/数字/连字符",
-            },
-          ]}
-        >
-          <Input placeholder="url-slug" />
+        <Form.Item label={<Label icon={<FiLink size={13} />} text="访问地址" />}>
+          <Input
+            value={`/blog/posts/${draft.slug || "（未生成）"}`}
+            readOnly
+            className="font-mono text-sm"
+          />
+          <div className="mt-1 text-[11px] text-slate-400">
+            由标题自动生成，创建后不可修改
+          </div>
         </Form.Item>
 
         <Form.Item

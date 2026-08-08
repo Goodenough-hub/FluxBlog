@@ -43,6 +43,17 @@ const STATUS_COLOR: Record<string, string> = {
   unpublishing: "warning",
 };
 
+// 从标题生成 URL slug：小写 + 空格/下划线转连字符 + 保留中文 + 去其余特殊字符
+function slugifyFromTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^一-鿺a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 export default function EditorPage() {
   const { ready, loggedIn } = useAuth();
   const { id } = useParams();
@@ -59,7 +70,9 @@ export default function EditorPage() {
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [newForm] = Form.useForm<{ slug: string; title: string }>();
+  const [newForm] = Form.useForm<{ title: string }>();
+  const watchedTitle = Form.useWatch("title", newForm) ?? "";
+  const previewSlug = slugifyFromTitle(watchedTitle) || "your-post";
 
   const loadedRef = useRef(false);
 
@@ -106,6 +119,7 @@ export default function EditorPage() {
       setMarkdown("");
       setMeta(null);
       setBaseVersion(0);
+      newForm.resetFields();
       loadedRef.current = true;
       return;
     }
@@ -185,17 +199,35 @@ export default function EditorPage() {
   }, [sc]);
 
   // 处理新建草稿提交
-  const onCreate = async (v: { slug: string; title: string }) => {
+  const onCreate = async (v: { title: string }) => {
     setCreating(true);
     try {
-      const d = await draftsApi.create({
-        slug: v.slug,
-        title: v.title,
-        markdown: "",
-        visibility: "private",
+      const baseSlug = slugifyFromTitle(v.title);
+      if (!baseSlug) {
+        message.error("无法从标题生成网址路径，请使用更明确的标题");
+        return;
+      }
+      let slug = baseSlug;
+      let d: Draft | null = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          d = await draftsApi.create({
+            slug,
+            title: v.title,
+            markdown: "",
+            visibility: "private",
+          });
+          break;
+        } catch (e: any) {
+          if (e.status !== 409 || attempt === 4) throw e;
+          slug = `${baseSlug}-${attempt + 2}`; // my-post-2, -3, ...
+        }
+      }
+      message.success({
+        content: `已创建草稿：/blog/posts/${slug}`,
+        duration: 4,
       });
-      message.success("已创建草稿");
-      navigate(`/editor/${d.id}`);
+      navigate(`/editor/${d!.id}`);
     } catch (e: any) {
       message.error(e.message);
     } finally {
@@ -308,27 +340,21 @@ export default function EditorPage() {
             form={newForm}
             layout="vertical"
             onFinish={onCreate}
-            initialValues={{ slug: "", title: "" }}
+            initialValues={{ title: "" }}
           >
-            <Form.Item
-              label="slug"
-              name="slug"
-              rules={[
-                { required: true, message: "slug 必填" },
-                {
-                  pattern: /^[a-z0-9一-龥]+(-[a-z0-9一-龥]+)*$/,
-                  message: "中文/小写字母/数字/连字符",
-                },
-              ]}
-            >
-              <Input placeholder="my-new-post" autoFocus />
-            </Form.Item>
             <Form.Item
               label="标题"
               name="title"
               rules={[{ required: true, message: "标题必填" }]}
             >
-              <Input placeholder="文章标题" />
+              <Input placeholder="文章标题" autoFocus />
+            </Form.Item>
+            <Form.Item label="访问地址（自动生成，不可修改）">
+              <Input
+                value={`/blog/posts/${previewSlug}`}
+                readOnly
+                className="font-mono text-sm"
+              />
             </Form.Item>
             <div className="flex justify-between">
               <Button onClick={() => navigate("/")} disabled={creating}>
