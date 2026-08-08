@@ -1,0 +1,530 @@
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Button,
+  Input,
+  Table,
+  Tag,
+  Tooltip,
+  Popconfirm,
+  Select,
+  App as AntdApp,
+  type TableColumnsType as ColumnsType,
+  type TableProps,
+} from "antd";
+import type { TableRowSelection } from "antd/es/table/interface";
+import {
+  FiFileText,
+  FiSearch,
+  FiEdit2,
+  FiTrash2,
+  FiPlus,
+  FiExternalLink,
+  FiEye,
+  FiEyeOff,
+  FiRotateCcw,
+  FiUploadCloud,
+  FiArrowDownCircle,
+} from "react-icons/fi";
+import dayjs from "dayjs";
+import { useAuth } from "../hooks/useAuth";
+import {
+  draftsApi,
+  projectsApi,
+  type Draft,
+  type Project,
+} from "../api/client";
+
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  draft: { label: "草稿", color: "default" },
+  publishing: { label: "发布中", color: "processing" },
+  published: { label: "已发布", color: "green" },
+  unpublishing: { label: "撤回中", color: "warning" },
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const meta = STATUS_META[status] || { label: status, color: "default" };
+  return <Tag color={meta.color}>{meta.label}</Tag>;
+}
+
+export default function ListPage() {
+  const { ready, loggedIn, doLogout } = useAuth();
+  const navigate = useNavigate();
+  const { message, modal, notification } = AntdApp.useApp();
+
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [batchDeleteLoading, setBatchDeleteLoading] = useState(false);
+  const [publishLoadingId, setPublishLoadingId] = useState<number | null>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+
+  // 筛选
+  const [searchTitle, setSearchTitle] = useState("");
+  const [filterProject, setFilterProject] = useState<number | null>(null);
+  const [filterTag, setFilterTag] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (ready && !loggedIn) {
+      window.location.hash = "#/login";
+    }
+  }, [ready, loggedIn]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [list, pros] = await Promise.all([
+        draftsApi.list(),
+        projectsApi.list(),
+      ]);
+      setDrafts(list);
+      setProjects(pros);
+    } catch (e: any) {
+      notification.error({ message: "加载失败", description: e.message });
+    } finally {
+      setLoading(false);
+    }
+  }, [notification]);
+
+  useEffect(() => {
+    if (loggedIn) void load();
+  }, [loggedIn, load]);
+
+  // 收集所有 tag 用于筛选下拉
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    drafts.forEach((d) => d.tags?.forEach((t) => set.add(t)));
+    return Array.from(set).sort();
+  }, [drafts]);
+
+  const filtered = useMemo(() => {
+    return drafts.filter((d) => {
+      if (searchTitle) {
+        const q = searchTitle.toLowerCase();
+        if (
+          !(d.title || "").toLowerCase().includes(q) &&
+          !(d.slug || "").toLowerCase().includes(q)
+        )
+          return false;
+      }
+      if (filterProject != null && d.projectId !== filterProject) return false;
+      if (filterTag && !(d.tags || []).includes(filterTag)) return false;
+      return true;
+    });
+  }, [drafts, searchTitle, filterProject, filterTag]);
+
+  const resetFilters = () => {
+    setSearchTitle("");
+    setFilterProject(null);
+    setFilterTag(null);
+  };
+
+  const delDraft = useCallback(
+    async (id: number, title: string) => {
+      try {
+        await draftsApi.delete(id);
+        message.success(`已删除「${title}」`);
+        await load();
+      } catch (e: any) {
+        message.error(e.message);
+      }
+    },
+    [load, message]
+  );
+
+  const delSelected = async () => {
+    if (!selectedRowKeys.length) {
+      message.warning("请先勾选要删除的草稿");
+      return;
+    }
+    setBatchDeleteLoading(true);
+    let ok = 0;
+    let fail = 0;
+    for (const key of selectedRowKeys) {
+      try {
+        await draftsApi.delete(Number(key));
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    setSelectedRowKeys([]);
+    setBatchDeleteLoading(false);
+    if (ok) message.success(`已删除 ${ok} 篇${fail ? `，失败 ${fail} 篇` : ""}`);
+    await load();
+  };
+
+  const togglePublish = async (draft: Draft) => {
+    setPublishLoadingId(draft.id);
+    try {
+      const isPublished = draft.status === "published";
+      if (isPublished) {
+        await draftsApi.unpublish(draft.id);
+        notification.success({ message: "已撤回" });
+      } else {
+        await draftsApi.publish(draft.id, draft.visibility);
+        notification.success({ message: "已发布" });
+      }
+      await load();
+    } catch (e: any) {
+      message.error(e.message);
+    } finally {
+      setPublishLoadingId(null);
+    }
+  };
+
+  const columns: ColumnsType<Draft> = useMemo(
+    () => [
+      {
+        title: "标题",
+        dataIndex: "title",
+        key: "title",
+        width: 280,
+        render: (text: string, r) => {
+          const display = text || r.slug;
+          return (
+            <Tooltip title={display} placement="topLeft">
+              <a
+                href={`#/editor/${r.id}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate(`/editor/${r.id}`);
+                }}
+                className="group inline-flex max-w-[280px] items-center gap-2 truncate"
+              >
+                <span className="truncate font-medium text-slate-700 transition-colors group-hover:text-indigo-600 dark:text-slate-200">
+                  {display}
+                </span>
+                <FiExternalLink
+                  size={12}
+                  className="shrink-0 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-slate-500"
+                />
+              </a>
+            </Tooltip>
+          );
+        },
+      },
+      {
+        title: "摘要",
+        dataIndex: "description",
+        key: "description",
+        width: 280,
+        render: (text: string) =>
+          text ? (
+            <Tooltip title={text}>
+              <p className="line-clamp-2 max-w-[280px] text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                {text}
+              </p>
+            </Tooltip>
+          ) : (
+            <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
+          ),
+      },
+      {
+        title: "标签",
+        dataIndex: "tags",
+        key: "tags",
+        width: 160,
+        render: (tags: string[]) =>
+          tags?.length ? (
+            <div className="flex flex-wrap gap-1">
+              {tags.slice(0, 3).map((t) => (
+                <Tag key={t} className="m-0">
+                  {t}
+                </Tag>
+              ))}
+              {tags.length > 3 && (
+                <Tooltip title={tags.slice(3).join("，")}>
+                  <Tag className="m-0">+{tags.length - 3}</Tag>
+                </Tooltip>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
+          ),
+      },
+      {
+        title: "状态",
+        dataIndex: "status",
+        key: "status",
+        width: 140,
+        render: (s: string, r) => (
+          <span className="inline-flex items-center gap-1">
+            <StatusBadge status={s} />
+            {r.visibility === "private" && (
+              <Tooltip title="仅自己可见">
+                <FiEyeOff size={12} className="text-slate-400" />
+              </Tooltip>
+            )}
+            {r.hasUnpublishedChanges && (
+              <Tooltip title="有未发布修改">
+                <span className="text-amber-500">●</span>
+              </Tooltip>
+            )}
+          </span>
+        ),
+      },
+      {
+        title: "版本",
+        key: "version",
+        width: 120,
+        render: (_, r) => (
+          <span className="inline-flex items-center gap-1 tabular-nums text-slate-600 dark:text-slate-300">
+            <span className="text-sm font-medium">v{r.version}</span>
+            {r.publishedVersion != null && (
+              <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                /已发v{r.publishedVersion}
+              </span>
+            )}
+          </span>
+        ),
+      },
+      {
+        title: "更新",
+        dataIndex: "updatedAt",
+        key: "updatedAt",
+        width: 140,
+        render: (t: string) => {
+          if (!t) return <span className="text-slate-400">—</span>;
+          const d = dayjs(t);
+          return (
+            <div className="flex flex-col leading-tight">
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {d.format("MM-DD HH:mm")}
+              </span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                {d.format("YYYY")}
+              </span>
+            </div>
+          );
+        },
+      },
+      {
+        title: "操作",
+        key: "action",
+        fixed: "right",
+        width: 180,
+        align: "center",
+        render: (_, r) => (
+          <div className="flex items-center justify-center gap-0.5">
+            <Tooltip title={r.status === "published" ? "撤回" : "发布"}>
+              <button
+                type="button"
+                disabled={publishLoadingId === r.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void togglePublish(r);
+                }}
+                className="flex size-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-indigo-600 disabled:opacity-50 dark:hover:bg-white/5 dark:hover:text-indigo-400 cursor-pointer"
+                aria-label={r.status === "published" ? "撤回" : "发布"}
+              >
+                {r.status === "published" ? (
+                  <FiArrowDownCircle size={16} />
+                ) : (
+                  <FiUploadCloud size={16} />
+                )}
+              </button>
+            </Tooltip>
+            <Tooltip title="预览">
+              <a
+                href={`/blog/drafts/${r.slug}`}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex size-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-white/5 dark:hover:text-indigo-400"
+                aria-label={`预览 ${r.title}`}
+              >
+                <FiEye size={16} />
+              </a>
+            </Tooltip>
+            <Tooltip title="编辑">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/editor/${r.id}`);
+                }}
+                className="flex size-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-white/5 dark:hover:text-indigo-400 cursor-pointer"
+                aria-label={`编辑 ${r.title}`}
+              >
+                <FiEdit2 size={16} />
+              </button>
+            </Tooltip>
+            <Popconfirm
+              title="删除草稿"
+              description="将永久删除该草稿及其所有版本，不可恢复。"
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              cancelText="取消"
+              onConfirm={() => void delDraft(r.id, r.title || r.slug)}
+            >
+              <Tooltip title="删除">
+                <button
+                  type="button"
+                  className="flex size-8 items-center justify-center rounded-lg text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 cursor-pointer dark:text-red-400 dark:hover:bg-red-500/10 dark:hover:text-red-300"
+                  aria-label={`删除 ${r.title}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <FiTrash2 size={16} />
+                </button>
+              </Tooltip>
+            </Popconfirm>
+          </div>
+        ),
+      },
+    ],
+    [navigate, publishLoadingId, togglePublish, delDraft]
+  );
+
+  const rowSelection: TableRowSelection<Draft> = {
+    selectedRowKeys,
+    onChange: setSelectedRowKeys,
+    fixed: "left",
+  };
+
+  if (!loggedIn) return null;
+
+  const selectedCount = selectedRowKeys.length;
+  const hasFilter = searchTitle || filterProject != null || filterTag;
+
+  return (
+    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-600 dark:bg-boxdark dark:text-slate-300">
+      {/* 标题卡 */}
+      <div className="m-4 mb-2 rounded-2xl border border-slate-200/80 bg-white px-5 py-3.5 dark:border-strokedark dark:bg-boxdark">
+        <div className="flex items-center justify-between gap-4 overflow-auto">
+          <h2 className="min-w-24 text-xl font-bold text-slate-900 dark:text-white">
+            草稿
+          </h2>
+          <div className="flex items-center gap-2">
+            <Button onClick={doLogout}>退出</Button>
+            <Button
+              type="primary"
+              icon={<FiPlus />}
+              onClick={() => navigate("/editor/new")}
+            >
+              写文章
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* 列表区 */}
+      <section className="mx-4 mb-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white dark:border-strokedark dark:bg-boxdark">
+        {/* 筛选 header */}
+        <header className="shrink-0 border-b border-slate-100 px-4 py-3 dark:border-strokedark">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <Input
+                allowClear
+                placeholder="搜索标题 / slug"
+                value={searchTitle}
+                onChange={(e) => setSearchTitle(e.target.value)}
+                prefix={<FiSearch className="text-slate-400" size={15} />}
+                className="w-full sm:w-56"
+              />
+              <Select
+                allowClear
+                placeholder="项目"
+                value={filterProject ?? undefined}
+                onChange={(v) => setFilterProject(v ?? null)}
+                options={projects.map((p) => ({ label: p.name, value: p.id }))}
+                className="w-full sm:w-40"
+              />
+              <Select
+                allowClear
+                showSearch
+                placeholder="标签"
+                value={filterTag ?? undefined}
+                onChange={(v) => setFilterTag(v ?? null)}
+                options={allTags.map((t) => ({ label: t, value: t }))}
+                className="w-full sm:w-32"
+              />
+              <Tooltip title="重置筛选">
+                <Button
+                  type="text"
+                  icon={<FiRotateCcw size={15} />}
+                  onClick={resetFilters}
+                  disabled={!hasFilter}
+                  className={
+                    hasFilter
+                      ? "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      : "text-slate-300 dark:text-slate-600"
+                  }
+                />
+              </Tooltip>
+            </div>
+
+            <div className="flex w-full shrink-0 flex-wrap items-center gap-2 xl:w-auto">
+              <div className="ml-auto flex items-center gap-1.5 rounded-xl border border-slate-100 bg-slate-50/80 p-1 dark:border-strokedark dark:bg-boxdark-2/50">
+                <Popconfirm
+                  title="批量删除"
+                  description={
+                    selectedCount > 0
+                      ? `确定删除已选的 ${selectedCount} 篇草稿？不可恢复。`
+                      : undefined
+                  }
+                  okText="删除"
+                  cancelText="取消"
+                  okButtonProps={{ danger: true }}
+                  disabled={selectedCount === 0}
+                  onConfirm={() => void delSelected()}
+                >
+                  <Button
+                    type="text"
+                    size="small"
+                    danger={selectedCount > 0}
+                    icon={<FiTrash2 size={15} />}
+                    loading={batchDeleteLoading}
+                    disabled={selectedCount === 0}
+                    className={selectedCount === 0 ? "text-slate-400" : ""}
+                  >
+                    删除{selectedCount > 0 ? ` · ${selectedCount}` : ""}
+                  </Button>
+                </Popconfirm>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* 表格 */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <Table<Draft>
+            rowKey="id"
+            rowSelection={rowSelection}
+            dataSource={filtered}
+            columns={columns}
+            loading={loading}
+            scroll={{ x: 1180 }}
+            pagination={{
+              position: ["bottomRight"],
+              pageSize: 10,
+              showTotal: (total) => (
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  共 {total} 篇
+                </span>
+              ),
+              className: "px-5! py-3!",
+            }}
+            onRow={(r) => ({
+              onClick: () => navigate(`/editor/${r.id}`),
+              style: { cursor: "pointer" },
+            })}
+            className="min-h-0 flex-1 [&_.ant-table-thead>tr>th]:bg-slate-50! [&_.ant-table-thead>tr>th]:font-medium! [&_.ant-table-thead>tr>th]:text-slate-500! dark:[&_.ant-table-thead>tr>th]:bg-boxdark-2! dark:[&_.ant-table-thead>tr>th]:text-slate-400!"
+            locale={{
+              emptyText: (
+                <div className="py-14 text-center">
+                  <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-boxdark-2 dark:text-slate-500">
+                    <FiFileText size={22} />
+                  </div>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    暂无草稿，点击右上角「写文章」开始创作
+                  </p>
+                </div>
+              ),
+            }}
+          />
+        </div>
+      </section>
+    </div>
+  );
+}

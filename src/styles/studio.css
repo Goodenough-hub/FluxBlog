@@ -173,17 +173,18 @@
   }
 }
 
-/* 双栏编辑/预览 */
+/* 双栏：左预览（发布态渲染）/ 右编辑（Vditor ir） */
 .studio-dual {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-top: 8px;
+  align-items: stretch;
 }
 .studio-pane {
   display: flex;
   flex-direction: column;
-  min-height: 56vh;
+  min-height: 70vh;
 }
 .pane-label {
   font-size: 12px;
@@ -194,7 +195,13 @@
   flex: 1;
   border: 1px solid var(--border, #8884);
   border-radius: 10px;
-  overflow: auto;
+  overflow: hidden;
+  min-height: 70vh;
+}
+/* Vditor 占满容器，跟随 FluxBlog 主题（vditor-editor.ts 用 setTheme 同步） */
+.editor-root .vditor {
+  height: 100% !important;
+  border-radius: 10px;
 }
 .preview-root {
   flex: 1;

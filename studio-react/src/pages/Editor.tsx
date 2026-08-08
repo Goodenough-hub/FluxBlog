@@ -1,0 +1,476 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  Button,
+  Tooltip,
+  Tag,
+  Modal,
+  Input,
+  Form,
+  App as AntdApp,
+} from "antd";
+import {
+  FiArrowLeft,
+  FiSave,
+  FiSend,
+  FiClock,
+  FiSettings,
+  FiUploadCloud,
+  FiArrowDownCircle,
+} from "react-icons/fi";
+import dayjs from "dayjs";
+import { useAuth } from "../hooks/useAuth";
+import {
+  draftsApi,
+  projectsApi,
+  type Draft,
+  type Project,
+} from "../api/client";
+import {
+  useSaveController,
+  type SaveInput,
+} from "../hooks/useSaveController";
+import VditorEditor from "../components/VditorEditor";
+import PreviewFrame from "../components/PreviewFrame";
+import MetaDrawer, { type MetaFormValue } from "../components/MetaDrawer";
+import HistoryDrawer from "../components/HistoryDrawer";
+import ConflictModal, { type ConflictInfo } from "../components/ConflictModal";
+
+const STATUS_COLOR: Record<string, string> = {
+  draft: "default",
+  publishing: "processing",
+  published: "green",
+  unpublishing: "warning",
+};
+
+export default function EditorPage() {
+  const { ready, loggedIn } = useAuth();
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { message, modal, notification } = AntdApp.useApp();
+
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [markdown, setMarkdown] = useState("");
+  const [meta, setMeta] = useState<MetaFormValue | null>(null);
+  const [baseVersion, setBaseVersion] = useState(0);
+  const [conflict, setConflict] = useState<ConflictInfo | null>(null);
+  const [metaDrawerOpen, setMetaDrawerOpen] = useState(false);
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+  const [publishLoading, setPublishLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newForm] = Form.useForm<{ slug: string; title: string }>();
+
+  const loadedRef = useRef(false);
+
+  useEffect(() => {
+    if (ready && !loggedIn) {
+      window.location.hash = "#/login";
+    }
+  }, [ready, loggedIn]);
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    projectsApi.list().then(setProjects).catch(() => {});
+  }, [loggedIn]);
+
+  const buildSaveInput = useCallback(
+    (md: string, m: MetaFormValue): SaveInput => ({
+      title: m.title,
+      slug: m.slug,
+      tags: m.tags || [],
+      description: m.description,
+      cover: m.cover,
+      markdown: md,
+      visibility: m.visibility,
+      projectId: m.projectId ?? null,
+    }),
+    []
+  );
+
+  const onConflict = useCallback((info: ConflictInfo) => {
+    setConflict(info);
+  }, []);
+
+  const sc = useSaveController({
+    draftId: draft?.id ?? 0,
+    baseVersion,
+    onConflict,
+  });
+
+  // 切草稿时重置状态
+  useEffect(() => {
+    if (!id) return;
+    if (id === "new") {
+      setDraft(null);
+      setMarkdown("");
+      setMeta(null);
+      setBaseVersion(0);
+      loadedRef.current = true;
+      return;
+    }
+    loadedRef.current = false;
+    (async () => {
+      try {
+        const d = await draftsApi.get(Number(id));
+        setDraft(d);
+        setMarkdown(d.markdown);
+        setBaseVersion(d.version);
+        const m: MetaFormValue = {
+          title: d.title,
+          slug: d.slug,
+          tags: d.tags || [],
+          description: d.description || "",
+          cover: d.cover || "",
+          visibility: d.visibility,
+          projectId: d.projectId ?? null,
+        };
+        setMeta(m);
+        // 检查 IndexedDB 是否有未同步快照
+        const snap = await sc.loadSnapshot(d.id, d.version);
+        if (snap && snap.markdown !== d.markdown) {
+          modal.confirm({
+            title: "检测到未同步的本地草稿副本",
+            content: "是否恢复本地编辑？取消则使用服务端版本。",
+            okText: "恢复本地",
+            cancelText: "用服务端",
+            onOk: () => {
+              setMarkdown(snap.markdown);
+              setMeta({
+                title: snap.title || m.title,
+                slug: snap.slug || m.slug,
+                tags: snap.tags ? snap.tags.split(",").map((s) => s.trim()).filter(Boolean) : m.tags,
+                description: snap.description || m.description,
+                cover: snap.cover || m.cover,
+                visibility: m.visibility,
+                projectId: m.projectId,
+              });
+            },
+          });
+        }
+        loadedRef.current = true;
+      } catch (e: any) {
+        message.error(e.message);
+        navigate("/");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, loggedIn]);
+
+  // 保存成功后 baseVersion 跟随 savedVersion
+  useEffect(() => {
+    if (sc.savedVersion > baseVersion) {
+      setBaseVersion(sc.savedVersion);
+    }
+  }, [sc.savedVersion, baseVersion]);
+
+  // markdown 或 meta 变化时调 schedule（含 IndexedDB 快照）
+  useEffect(() => {
+    if (!draft || !meta || !loadedRef.current) return;
+    const input = buildSaveInput(markdown, meta);
+    sc.persistSnapshot(input, baseVersion);
+    sc.schedule(input);
+  }, [markdown, meta, draft, baseVersion, buildSaveInput, sc]);
+
+  // beforeunload 提示
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (sc.dirty) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [sc]);
+
+  // 处理新建草稿提交
+  const onCreate = async (v: { slug: string; title: string }) => {
+    setCreating(true);
+    try {
+      const d = await draftsApi.create({
+        slug: v.slug,
+        title: v.title,
+        markdown: "",
+        visibility: "private",
+      });
+      message.success("已创建草稿");
+      navigate(`/editor/${d.id}`);
+    } catch (e: any) {
+      message.error(e.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // 冲突解决
+  const onUseServer = useCallback(async (server: Draft) => {
+    setDraft(server);
+    setMarkdown(server.markdown);
+    setMeta({
+      title: server.title,
+      slug: server.slug,
+      tags: server.tags || [],
+      description: server.description || "",
+      cover: server.cover || "",
+      visibility: server.visibility,
+      projectId: server.projectId ?? null,
+    });
+    setBaseVersion(server.version);
+    setConflict(null);
+    sc.resolveConflict();
+  }, [sc]);
+
+  const onKeepLocal = useCallback(
+    async (local: SaveInput, serverVersion: number) => {
+      try {
+        const updated = await draftsApi.update(draft!.id, local, serverVersion);
+        setDraft(updated);
+        setBaseVersion(updated.version);
+        setConflict(null);
+        sc.resolveConflict();
+        notification.success({ message: "本地编辑已基于服务端版本重存" });
+      } catch (e: any) {
+        message.error(e.message);
+      }
+    },
+    [draft, sc, message, notification]
+  );
+
+  // 发布 / 撤回
+  const onPublish = useCallback(async () => {
+    if (!draft) return;
+    setPublishLoading(true);
+    try {
+      // 先 flush 自动保存
+      try {
+        await sc.flush();
+      } catch {
+        message.error("有未保存的冲突，请先解决版本冲突再发布");
+        setPublishLoading(false);
+        return;
+      }
+      const isPublished = draft.status === "published";
+      if (isPublished) {
+        await draftsApi.unpublish(draft.id);
+        notification.success({ message: "已撤回" });
+      } else {
+        await draftsApi.publish(draft.id, draft.visibility);
+        notification.success({ message: "已提交发布任务" });
+      }
+      // 重新加载 draft
+      const updated = await draftsApi.get(draft.id);
+      setDraft(updated);
+    } catch (e: any) {
+      message.error(e.message);
+    } finally {
+      setPublishLoading(false);
+    }
+  }, [draft, sc, message, notification]);
+
+  // 历史恢复
+  const onRestore = useCallback(
+    async (version: number) => {
+      if (!draft) return;
+      const updated = await draftsApi.restore(draft.id, version);
+      setDraft(updated);
+      setMarkdown(updated.markdown);
+      setBaseVersion(updated.version);
+      setMeta({
+        title: updated.title,
+        slug: updated.slug,
+        tags: updated.tags || [],
+        description: updated.description || "",
+        cover: updated.cover || "",
+        visibility: updated.visibility,
+        projectId: updated.projectId ?? null,
+      });
+      sc.resolveConflict();
+      message.success(`已恢复到 v${version}（作为 v${updated.version}）`);
+    },
+    [draft, sc, message]
+  );
+
+  if (!loggedIn) return null;
+
+  // 新建草稿态：弹出 slug+title 表单
+  if (id === "new" && !draft) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-boxdark">
+        <Modal
+          title="新建草稿"
+          open
+          closable={false}
+          footer={null}
+          width={420}
+        >
+          <Form
+            form={newForm}
+            layout="vertical"
+            onFinish={onCreate}
+            initialValues={{ slug: "", title: "" }}
+          >
+            <Form.Item
+              label="slug"
+              name="slug"
+              rules={[
+                { required: true, message: "slug 必填" },
+                {
+                  pattern: /^[a-z0-9一-龥]+(-[a-z0-9一-龥]+)*$/,
+                  message: "中文/小写字母/数字/连字符",
+                },
+              ]}
+            >
+              <Input placeholder="my-new-post" autoFocus />
+            </Form.Item>
+            <Form.Item
+              label="标题"
+              name="title"
+              rules={[{ required: true, message: "标题必填" }]}
+            >
+              <Input placeholder="文章标题" />
+            </Form.Item>
+            <div className="flex justify-between">
+              <Button onClick={() => navigate("/")} disabled={creating}>
+                取消
+              </Button>
+              <Button type="primary" htmlType="submit" loading={creating}>
+                创建
+              </Button>
+            </div>
+          </Form>
+        </Modal>
+      </div>
+    );
+  }
+
+  if (!draft || !meta) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-400 dark:bg-boxdark">
+        <span>加载草稿…</span>
+      </div>
+    );
+  }
+
+  const isPublished = draft.status === "published";
+
+  return (
+    <div className="flex h-screen flex-col bg-slate-50 text-slate-700 dark:bg-boxdark dark:text-slate-300">
+      {/* 顶栏 */}
+      <header className="flex shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white px-4 py-2.5 dark:border-strokedark dark:bg-boxdark">
+        <Button
+          type="text"
+          icon={<FiArrowLeft size={16} />}
+          onClick={async () => {
+            try {
+              await sc.flush();
+            } catch {
+              /* conflict handled in modal */
+            }
+            navigate("/");
+          }}
+        />
+        <Tag color={STATUS_COLOR[draft.status] || "default"}>
+          {draft.status} · v{baseVersion}
+        </Tag>
+        <span className="text-xs">
+          {sc.state === "saving" && <span className="text-amber-500">保存中…</span>}
+          {sc.state === "idle" && !sc.dirty && (
+            <span className="text-emerald-500">已保存 ✓</span>
+          )}
+          {sc.state === "idle" && sc.dirty && (
+            <span className="text-slate-400">编辑中…</span>
+          )}
+          {sc.state === "blocked" && (
+            <span className="text-red-500">版本冲突 ⚠</span>
+          )}
+          {sc.state === "error" && (
+            <Tooltip title={sc.lastError || "保存失败"}>
+              <span className="text-red-500">保存失败</span>
+            </Tooltip>
+          )}
+        </span>
+        <span className="flex-1" />
+        <Tooltip title="历史版本">
+          <Button
+            type="text"
+            icon={<FiClock size={16} />}
+            onClick={() => setHistoryDrawerOpen(true)}
+          />
+        </Tooltip>
+        <Tooltip title="文章信息">
+          <Button
+            type="text"
+            icon={<FiSettings size={16} />}
+            onClick={() => setMetaDrawerOpen(true)}
+          />
+        </Tooltip>
+        <Button
+          type={isPublished ? "default" : "primary"}
+          icon={isPublished ? <FiArrowDownCircle size={14} /> : <FiUploadCloud size={14} />}
+          onClick={onPublish}
+          loading={publishLoading}
+        >
+          {isPublished ? "撤回" : "发布"}
+        </Button>
+      </header>
+
+      {/* 主区：左预览 + 右编辑 */}
+      <main className="flex min-h-0 flex-1">
+        {/* 左：预览 */}
+        <section className="flex min-w-0 flex-1 flex-col border-r border-slate-200/80 dark:border-strokedark">
+          <PaneHeader label="预览" hint="实时渲染发布态（remark/rehype + Shiki + KaTeX + Mermaid）" />
+          <div className="min-h-0 flex-1 overflow-hidden bg-white dark:bg-boxdark">
+            <PreviewFrame markdown={markdown} />
+          </div>
+        </section>
+        {/* 右：编辑 */}
+        <section className="flex min-w-0 flex-1 flex-col bg-white dark:bg-boxdark">
+          <PaneHeader label="编辑" hint="Vditor · ir 模式 · 工具栏上传图片自动转 WebP" />
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <VditorEditor
+              key={draft.id}
+              value={markdown}
+              draftId={draft.id}
+              onChange={setMarkdown}
+            />
+          </div>
+        </section>
+      </main>
+
+      <MetaDrawer
+        open={metaDrawerOpen}
+        onClose={() => setMetaDrawerOpen(false)}
+        draft={draft}
+        projects={projects}
+        onChange={(m) => setMeta(m)}
+      />
+      <HistoryDrawer
+        open={historyDrawerOpen}
+        onClose={() => setHistoryDrawerOpen(false)}
+        draftId={draft.id}
+        currentVersion={baseVersion}
+        onRestore={onRestore}
+      />
+      <ConflictModal
+        conflict={conflict}
+        onUseServer={onUseServer}
+        onKeepLocal={onKeepLocal}
+        onCancel={() => setConflict(null)}
+      />
+    </div>
+  );
+}
+
+function PaneHeader({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-2 dark:border-strokedark">
+      <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {label}
+      </span>
+      {hint && (
+        <span className="text-xs text-slate-400 dark:text-slate-500">{hint}</span>
+      )}
+    </div>
+  );
+}

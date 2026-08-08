@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Helvetica Neue",
+    Arial,
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.dark body {
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+/* FluxBlog Studio 配色变量（亮/暗双主题） */
+:root {
+  --st-primary: #6366f1;
+  --st-border: #e2e8f0;
+  --st-bg: #ffffff;
+  --st-bg-2: #f8fafc;
+  --st-text: #0f172a;
+  --st-text-muted: #64748b;
+}
+
+.dark {
+  --st-primary: #818cf8;
+  --st-border: #1e293b;
+  --st-bg: #0f172a;
+  --st-bg-2: #111827;
+  --st-text: #e2e8f0;
+  --st-text-muted: #94a3b8;
+}
+
+/* Vditor 容器跟随 FluxBlog 主题（setTheme 同步暗/亮） */
+.st-vditor-host .vditor {
+  height: 100% !important;
+  border-radius: 12px;
+}

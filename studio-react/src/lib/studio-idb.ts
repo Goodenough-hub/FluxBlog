@@ -1,16 +1,13 @@
-/**
- * Studio IndexedDB 恢复副本：防抖保存期间把未同步的编辑写入本地，
- * 页面刷新/崩溃后回到编辑器时若版本仍一致则可恢复。
- * key = (draftId, version)；保存成功后清除。
- * 备份全字段（slug/标题/描述/标签/封面/正文），避免恢复时丢字段。
- */
+// Studio IndexedDB 恢复副本：防抖保存期间把未同步的编辑写入本地，
+// 页面刷新/崩溃后回到编辑器时若版本仍一致则可恢复。
+// key = (draftId, version)；保存成功后清除。
 
 const DB_NAME = "fluxblog-studio";
 const STORE = "snapshots";
 
 let dbp: Promise<IDBDatabase> | null = null;
 
-export function initDB(): Promise<IDBDatabase> {
+function initDB(): Promise<IDBDatabase> {
   if (dbp) return dbp;
   dbp = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);

@@ -1,17 +1,21 @@
 ---
-import Layout from "@/layouts/Layout.astro";
-import "@/styles/studio.css";
-
-// Studio 是写作后台，不应被 Pagefind 索引（发布态由公开文章承担索引）。
+// Studio 入口：跳转到 React 子应用 /blog/studio-app/（HashRouter）。
+// React 构建产物落 public/studio-app/，Astro build 时原样复制到 dist/client/studio-app/。
+// nginx 加 location /blog/studio-app/ alias /var/www/fluxblog/client/studio-app/ 服务。
+// 鉴权由 React 子应用自己处理（httpOnly cookie 同源携带）。
 ---
 
-<Layout title="FluxBlog Studio">
-  <main class="studio-shell studio-layout" data-pagefind-ignore>
-    <aside id="studio-sidebar" class="studio-sidebar"></aside>
-    <div id="studio-app" class="studio-root"></div>
-  </main>
-</Layout>
-
-<script>
-  import "@/scripts/studio";
-</script>
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="refresh" content="0; url=/blog/studio-app/" />
+    <title>FluxBlog Studio</title>
+    <script>
+      window.location.replace("/blog/studio-app/");
+    </script>
+  </head>
+  <body>
+    <p>跳转到 <a href="/blog/studio-app/">FluxBlog Studio</a>…</p>
+  </body>
+</html>

@@ -1,0 +1,149 @@
+import { useEffect, useRef } from "react";
+import Vditor from "vditor";
+import {
+  prepareImage,
+  uploadImage,
+  isAcceptedImage,
+} from "../lib/image-utils";
+
+export interface VditorEditorProps {
+  value: string;
+  draftId: number;
+  onChange: (markdown: string) => void;
+}
+
+// React 包装 Vditor：
+// - mode='ir'（Typora 风格即时渲染）
+// - 关闭内置 preview（左预览由 PreviewFrame 走 FluxBlog 发布态渲染管线）
+// - upload.handler 接 image-utils 的 WebP/EXIF 预处理 + cookie 上传
+// - theme 跟随 html[data-theme]（与 Antd 一致，由 MutationObserver 同步）
+export default function VditorEditor({
+  value,
+  draftId,
+  onChange,
+}: VditorEditorProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const vditorRef = useRef<Vditor | null>(null);
+  // onChange 通过 ref 透传，避免每次重渲染都重建 Vditor
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const draftIdRef = useRef(draftId);
+  draftIdRef.current = draftId;
+  const readyRef = useRef(false);
+  const pendingChangeRef = useRef<((md: string) => void) | null>(null);
+
+  useEffect(() => {
+    if (!rootRef.current) return;
+    const root = rootRef.current;
+
+    const initialDark =
+      document.documentElement.dataset.theme === "dark" ||
+      document.documentElement.classList.contains("dark");
+
+    const vditor = new Vditor(root, {
+      mode: "ir",
+      value,
+      height: "100%",
+      width: "100%",
+      toolbar: [
+        "emoji", "headings", "bold", "italic", "strike", "|",
+        "line", "quote", "list", "ordered-list", "check", "outdent", "indent", "|",
+        "code", "inline-code", "insert-before", "insert-after", "link", "table", "|",
+        "upload", "record", "preview", "outline", "|",
+        "undo", "redo", "edit-mode",
+      ],
+      toolbarConfig: { pin: true },
+      upload: {
+        accept: "image/*",
+        multiple: true,
+        handler: (files: File[]) => {
+          return (async () => {
+            const valid = files.filter(isAcceptedImage);
+            if (!valid.length) return null;
+            const urls: string[] = [];
+            for (const f of valid) {
+              try {
+                const prepared = await prepareImage(f);
+                const url = await uploadImage(prepared, draftIdRef.current);
+                urls.push(`![${f.name.replace(/\.[^.]+$/, "")}](${url})`);
+              } catch (e) {
+                console.error("vditor upload failed", e);
+              }
+            }
+            if (!urls.length) return null;
+            return urls.join("\n");
+          })() as Promise<string>;
+        },
+      },
+      preview: {
+        delay: 0,
+        mode: "editor",
+        hljs: { enable: false },
+        markdown: { toc: false },
+      },
+      cache: { enable: false },
+      counter: { enable: true, type: "markdown" },
+      comment: { enable: false },
+      input: (v: string) => {
+        if (!readyRef.current) {
+          pendingChangeRef.current = onChangeRef.current;
+          return;
+        }
+        onChangeRef.current(v);
+      },
+      after: () => {
+        readyRef.current = true;
+        if (pendingChangeRef.current) {
+          const fn = pendingChangeRef.current;
+          pendingChangeRef.current = null;
+          fn(vditor.getValue());
+        }
+      },
+      theme: initialDark ? "dark" : "classic",
+    });
+    vditorRef.current = vditor;
+
+    // 主题跟随
+    const observer = new MutationObserver(() => {
+      const dark =
+        document.documentElement.dataset.theme === "dark" ||
+        document.documentElement.classList.contains("dark");
+      try {
+        vditor.setTheme(dark ? "dark" : "classic");
+      } catch {
+        /* ignore */
+      }
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme", "class"],
+    });
+
+    return () => {
+      observer.disconnect();
+      readyRef.current = false;
+      pendingChangeRef.current = null;
+      try {
+        vditor.destroy();
+      } catch {
+        /* ignore */
+      }
+      vditorRef.current = null;
+    };
+    // 故意只在 mount 时创建。value 变化通过 setValue 在下面处理。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 外部 value 变化（如切换草稿、恢复版本）时同步到 Vditor。
+  // 比较内容避免回环：onChange 后内部已同步，外部 value 与内部一致时不重置。
+  useEffect(() => {
+    const vd = vditorRef.current;
+    if (!vd || !readyRef.current) return;
+    const current = vd.getValue();
+    if (current !== value) {
+      vd.setValue(value);
+    }
+  }, [value]);
+
+  return <div ref={rootRef} className="st-vditor-host h-full w-full" />;
+}

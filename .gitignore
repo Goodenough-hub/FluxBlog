@@ -26,6 +26,9 @@ pnpm-debug.log*
 # pagefind
 public/pagefind
 
+# studio-react 子应用构建产物（由 npm run build:studio-react 生成到 public/studio-app/）
+public/studio-app
+
 # pnpm
 .pnpm-store
 

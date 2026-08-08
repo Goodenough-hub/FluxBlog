@@ -1,11 +1,11 @@
-/**
- * 图片预处理：JPEG/PNG/WebP 在浏览器转 WebP（最长边 2560px、质量 0.82），
- * Canvas 重编码同时移除 EXIF（createImageBitmap imageOrientation 应用方向）；
- * GIF 保持原格式；SVG 拒绝。原文件 ≤25MiB，转换结果 ≤8MiB（后端上限）。
- */
+// 图片预处理：JPEG/PNG/WebP 在浏览器转 WebP（最长边 2560px、质量 0.82），
+// Canvas 重编码同时移除 EXIF（createImageBitmap imageOrientation 应用方向）；
+// GIF 保持原格式；SVG 拒绝。原文件 ≤25MiB，转换结果 ≤8MiB（后端上限）。
+// 鉴权：httpOnly cookie 自动携带，无需手动注入 token。
 export const MAX_RAW = 25 * 1024 * 1024;
 const MAX_EDGE = 2560;
 const QUALITY = 0.82;
+const API_BASE = "/api/v1/blog";
 
 export interface PreparedImage {
   blob: Blob;
@@ -35,7 +35,7 @@ function canvasToBlob(
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      b => (b ? resolve(b) : reject(new Error("encode failed"))),
+      (b) => (b ? resolve(b) : reject(new Error("encode failed"))),
       type,
       quality
     );
@@ -46,11 +46,9 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
   if (file.size > MAX_RAW) throw new Error("原文件超过 25MiB");
   if (!isAcceptedImage(file))
     throw new Error("仅接受 JPEG/PNG/WebP/GIF，拒绝 SVG");
-  // GIF 保持原格式（动图）。
   if (file.type === "image/gif")
     return { blob: file, mime: "image/gif", filename: file.name };
 
-  // imageOrientation: "from-image" 应用 EXIF 方向；bitmap 无 EXIF，后续 canvas/WebP 也不含。
   const bitmap = await createImageBitmap(file, {
     imageOrientation: "from-image",
   }).catch(() => null);
@@ -63,7 +61,6 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
     canvas.getContext("2d")!.drawImage(bitmap, 0, 0, w, h);
     bitmap.close?.();
   } else {
-    // 回退：用 <img> 解码（不处理 EXIF 方向）。
     const url = URL.createObjectURL(file);
     try {
       const img = await loadImg(url);
@@ -91,7 +88,7 @@ function loadImg(url: string): Promise<HTMLImageElement> {
   });
 }
 
-/** 上传预处理后的图片到 /assets，带进度回调与一次重试。 */
+/** 上传图片到 /assets，带进度回调与一次重试。鉴权由 cookie 自动携带。 */
 export async function uploadImage(
   prepared: PreparedImage,
   draftId: number,
@@ -100,13 +97,12 @@ export async function uploadImage(
   const fd = new FormData();
   fd.append("file", prepared.blob, prepared.filename);
   fd.append("draftId", String(draftId));
-  const url = (import.meta.env.PUBLIC_BLOG_API || "/api/v1/blog") + "/assets";
-  const token = localStorage.getItem("fluxblog_token") || "";
+  const url = `${API_BASE}/assets`;
 
   let lastErr: any = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const text = await uploadOnce(url, token, fd, onProgress);
+      const text = await uploadOnce(url, fd, onProgress);
       const data = JSON.parse(text);
       return data.previewUrl as string;
     } catch (e) {
@@ -118,15 +114,15 @@ export async function uploadImage(
 
 function uploadOnce(
   url: string,
-  token: string,
   fd: FormData,
   onProgress?: (r: number) => void
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    xhr.upload.onprogress = e => {
+    // 同源 cookie 自动携带，无需手动注入 Authorization
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
     };
     xhr.onload = () =>
@@ -136,4 +132,12 @@ function uploadOnce(
     xhr.onerror = () => reject(new Error("网络错误"));
     xhr.send(fd);
   });
+}
+
+/** 受保护图片：fetch Blob 后 revoke 临时 URL（外部调用方负责 revoke）。 */
+export async function fetchAssetBlob(path: string): Promise<string> {
+  const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
+  if (!res.ok) throw new Error(`asset ${res.status}`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }

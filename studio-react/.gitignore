@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+
+# TS incremental cache
+tsconfig.tsbuildinfo
+
+# Vite 临时
+*.log
