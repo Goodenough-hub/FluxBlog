@@ -342,6 +342,36 @@ export default function EditorPage() {
     [draft, sc, message, notification, navigate]
   );
 
+  // 更新发布：已发布文章修改后，直接用原有项目/标签/可见性同步到博客。
+  // 不弹窗，用户在 MetaDrawer 改的项目/标签会随下次自动保存写回草稿，
+  // 这里 flush 后调 publish 把当前 version 提升为 publishedVersion。
+  const onRepublish = useCallback(async () => {
+    if (!draft) return;
+    setPublishLoading(true);
+    try {
+      try {
+        await sc.flush();
+      } catch {
+        message.error("有未保存的冲突，请先解决版本冲突再更新发布");
+        return;
+      }
+      await draftsApi.publish(draft.id, {
+        visibility: draft.visibility,
+        projectId: draft.projectId ?? null,
+        tags: draft.tags ?? [],
+      });
+      notification.success({
+        message: `已更新发布：/blog/posts/${draft.slug}`,
+        duration: 4,
+      });
+      navigate("/");
+    } catch (e: any) {
+      message.error(e.message);
+    } finally {
+      setPublishLoading(false);
+    }
+  }, [draft, sc, message, notification, navigate]);
+
   // 撤回：弹二次确认 → flush → unpublish API
   const onUnpublish = useCallback(async () => {
     if (!draft) return;
@@ -509,7 +539,7 @@ export default function EditorPage() {
             <Button
               type="primary"
               icon={<FiRefreshCw size={14} />}
-              onClick={() => setPublishModalOpen(true)}
+              onClick={onRepublish}
               loading={publishLoading}
             >
               更新发布
