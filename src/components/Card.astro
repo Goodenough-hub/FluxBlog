@@ -39,7 +39,7 @@ const href = linkBase
   <Datetime publishedAt={publishedAt ?? ""} updatedAt={updatedAt} />
   {projectName && projectId != null && (
     <span class="ml-2">
-      <ProjectBadge id={projectId} name={projectName} />
+      <ProjectBadge id={projectId} name={projectName} linkBase={linkBase} />
     </span>
   )}
   <p>{description}</p>
