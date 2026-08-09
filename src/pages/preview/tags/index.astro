@@ -43,7 +43,7 @@ const tags = [...seen.values()].sort((a, b) => a.tag.localeCompare(b.tag));
 <Layout title={`标签预览 | ${config.site.title}`}>
   <Header linkBase="preview" />
 
-  <Breadcrumb />
+  <Breadcrumb linkBase="preview" />
 
   <Main pageTitle="标签预览" pageDesc="所有标签（含私有文章），仅 admin 可见。">
     <ul class="flex flex-wrap gap-6">

@@ -62,7 +62,7 @@ const nextUrl = currentPage < lastPage ? pageUrl(currentPage + 1) : undefined;
 <Layout title={`标签: ${tagName} | ${config.site.title}`}>
   <Header linkBase="preview" />
 
-  <Breadcrumb />
+  <Breadcrumb linkBase="preview" />
 
   <Main
     pageTitle={`标签: ${tagName}`}

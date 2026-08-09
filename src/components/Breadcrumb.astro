@@ -4,6 +4,13 @@ import { stripBase, stripLocale } from "@/utils/withBase";
 import { useTranslations } from "@/i18n";
 import config from "@/config";
 
+type Props = {
+  /** 父路径段。preview 页传 "preview"：Home 指 /preview/，中间段前面拼 /preview/。 */
+  linkBase?: string;
+};
+
+const { linkBase } = Astro.props;
+
 const locale = Astro.currentLocale ?? config.site.lang;
 const t = useTranslations(locale);
 
@@ -14,7 +21,16 @@ const currentUrlPath = stripLocale(pathWithoutBase, locale);
 
 // Get url array from path
 // eg: /tags/tailwindcss => ['tags', 'tailwindcss']
-const breadcrumbList = currentUrlPath.split("/").slice(1).filter(Boolean);
+let breadcrumbList = currentUrlPath.split("/").slice(1).filter(Boolean);
+
+// preview 态下把首段的 "preview" 隐掉，避免面包屑重复出现 preview > preview > ...
+if (linkBase && breadcrumbList[0] === linkBase) {
+  breadcrumbList = breadcrumbList.slice(1);
+}
+
+const homeHref = linkBase ? getRelativeLocaleUrl(locale, linkBase) : getRelativeLocaleUrl(locale, "");
+const segHref = (seg: string) =>
+  linkBase ? getRelativeLocaleUrl(locale, `${linkBase}/${seg}`) : getRelativeLocaleUrl(locale, seg);
 
 const decodeSegment = (value: string) => {
   try {
@@ -62,7 +78,7 @@ if (breadcrumbList[0] === "tags" && !isNaN(Number(breadcrumbList[2]))) {
     class="flex flex-wrap items-center gap-x-1 font-light [&>li:not(:last-child)>a]:hover:opacity-100"
   >
     <li class="flex items-center gap-x-1">
-      <a href={getRelativeLocaleUrl(locale, "")} class="opacity-80">
+      <a href={homeHref} class="opacity-80">
         {t.nav.home}
       </a>
       <span aria-hidden="true" class="opacity-80">&raquo;</span>
@@ -82,7 +98,7 @@ if (breadcrumbList[0] === "tags" && !isNaN(Number(breadcrumbList[2]))) {
         ) : (
           <li class="flex items-center gap-x-1">
             <a
-              href={getRelativeLocaleUrl(locale, breadcrumb)}
+              href={segHref(breadcrumb)}
               class="capitalize opacity-70"
             >
               {navLabels[breadcrumb] ?? decodeSegment(breadcrumb)}

@@ -1,0 +1,52 @@
+---
+import { getEntry, render } from "astro:content";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import Main from "@/components/Main.astro";
+import Footer from "@/components/Footer.astro";
+import config from "@/config";
+
+// admin 预览 about（SSR）：内容与 /blog/about/ 一致，只是外壳保持在 preview
+// 上下文（Header/Breadcrumb linkBase="preview"）。无登录 → 跳博客登录页。
+export const prerender = false;
+
+const token = Astro.cookies.get("fluxblog_token")?.value;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const loginUrl = `${base}login/?next=${encodeURIComponent(Astro.url.pathname)}`;
+
+if (!token) {
+  return Astro.redirect(loginUrl, 302);
+}
+
+const about = await getEntry("pages", "about");
+
+if (!about) {
+  throw new Error(
+    "Missing content entry: `about.md` or `about.mdx` in `src/content/pages/`"
+  );
+}
+
+const { Content } = await render(about);
+---
+
+<Layout
+  title={`${about.data.title} | ${config.site.title}`}
+  description={about.data.description}
+  ogImage={about.data.ogImage}
+  canonicalURL={about.data.canonicalURL}
+>
+  <Fragment slot="head">
+    <meta name="robots" content="noindex" />
+  </Fragment>
+
+  <Header linkBase="preview" />
+
+  <Breadcrumb linkBase="preview" />
+
+  <Main pageTitle={about.data.title} class="app-prose">
+    <Content />
+  </Main>
+
+  <Footer />
+</Layout>

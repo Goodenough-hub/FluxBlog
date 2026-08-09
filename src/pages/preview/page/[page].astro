@@ -52,7 +52,7 @@ const nextUrl = currentPage < lastPage ? pageUrl(currentPage + 1) : undefined;
 <Layout title={`博客预览 | ${config.site.title}`}>
   <Header linkBase="preview" />
 
-  <Breadcrumb />
+  <Breadcrumb linkBase="preview" />
 
   <Main pageTitle="博客预览" pageDesc="所有已发布文章（公开 + 私有），仅 admin 可见。">
     <ul>

@@ -34,7 +34,7 @@ const projectUrl = (id: number) => getRelativeLocaleUrl(locale, `preview/project
 <Layout title={`项目预览 | ${config.site.title}`}>
   <Header linkBase="preview" />
 
-  <Breadcrumb />
+  <Breadcrumb linkBase="preview" />
 
   <Main pageTitle="项目预览" pageDesc="所有项目（含私有文章计数），仅 admin 可见。">
     {projects.length === 0 ? (

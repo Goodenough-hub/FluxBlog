@@ -1,0 +1,94 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import Main from "@/components/Main.astro";
+import Footer from "@/components/Footer.astro";
+import Card from "@/components/Card.astro";
+import { listAllPostsForAdmin } from "@/utils/blogApi";
+import { useTranslations } from "@/i18n";
+import config from "@/config";
+
+// admin 预览搜索（SSR）：拉全量已发布文章（含 private），按 q 客户端过滤
+// title/description/tags。避免后端加 admin-preview 搜索端点。
+// 无登录/令牌失效 → 跳博客登录页。
+export const prerender = false;
+
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+
+const token = Astro.cookies.get("fluxblog_token")?.value;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const loginUrl = `${base}login/?next=${encodeURIComponent(Astro.url.pathname)}`;
+
+if (!token) {
+  return Astro.redirect(loginUrl, 302);
+}
+
+const rawQ = Astro.url.searchParams.get("q") ?? "";
+const q = rawQ.trim().toLowerCase();
+
+let items: Awaited<ReturnType<typeof listAllPostsForAdmin>> = [];
+if (q) {
+  try {
+    const all = await listAllPostsForAdmin(token);
+    items = all.filter(p =>
+      p.title.toLowerCase().includes(q) ||
+      p.description.toLowerCase().includes(q) ||
+      (p.tags ?? []).some(t => t.toLowerCase().includes(q))
+    );
+  } catch {
+    return Astro.redirect(loginUrl, 302);
+  }
+}
+---
+
+<Layout title={`${t.pages.searchTitle} | ${config.site.title}`}>
+  <Fragment slot="head">
+    <meta name="robots" content="noindex" />
+  </Fragment>
+
+  <Header linkBase="preview" />
+
+  <Breadcrumb linkBase="preview" />
+
+  <Main pageTitle={t.pages.searchTitle} pageDesc="搜索所有已发布文章（含私有）。">
+    <form method="get" class="mb-6 flex gap-2">
+      <input
+        type="search"
+        name="q"
+        value={rawQ}
+        placeholder={t.pages.searchTitle}
+        class="border-border bg-background text-foreground flex-1 rounded border px-3 py-2"
+        autofocus
+      />
+      <button type="submit" class="bg-accent text-accent-foreground rounded px-4 py-2">
+        {t.pages.searchTitle}
+      </button>
+    </form>
+
+    {
+      q && (
+        <p class="text-muted-foreground mb-4 text-sm">
+          {items.length > 0
+            ? `${items.length} 个结果`
+            : "无结果"}
+        </p>
+      )
+    }
+
+    <ul>
+      {items.map(post => <Card variant="h3" post={post} linkBase="preview" />)}
+    </ul>
+  </Main>
+
+  <Footer />
+</Layout>
+
+<script>
+  document.addEventListener("astro:page-load", () => {
+    const mainContent = document.querySelector<HTMLElement>("#main-content");
+    const backUrl = mainContent?.dataset?.backurl;
+    if (backUrl) sessionStorage.setItem("backUrl", backUrl);
+  });
+</script>
