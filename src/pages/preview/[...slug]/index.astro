@@ -82,7 +82,7 @@ const visibilityLabel = post.visibility === "private" ? "🔒 私有" : "🌐 �
         size="lg"
       />
       {post.projectName && post.projectId != null && (
-        <ProjectBadge id={post.projectId} name={post.projectName} />
+        <ProjectBadge id={post.projectId} name={post.projectName} linkBase="preview" />
       )}
       <span class="text-muted-foreground text-sm">{visibilityLabel} · admin 预览</span>
     </div>
@@ -103,7 +103,7 @@ const visibilityLabel = post.visibility === "private" ? "🔒 私有" : "🌐 �
     <BackToTopButton />
 
     <ul class="mt-4 mb-8 flex flex-wrap gap-4 sm:my-8">
-      {tags.map(tag => <Tag tag={slugifyStr(tag)} tagName={tag} size="sm" />)}
+      {tags.map(tag => <Tag tag={slugifyStr(tag)} tagName={tag} size="sm" linkBase="preview" />)}
     </ul>
   </main>
   <Footer />

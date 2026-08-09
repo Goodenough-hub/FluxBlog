@@ -74,6 +74,12 @@ export function getAdminPreviewPost(slug: string, token: string): Promise<Post> 
   });
 }
 
+/** 列出所有 project 及已发布文章数（公开+私有），供 admin 预览页 /blog/preview/projects 使用。
+ *  走 admin-preview 端点，需要 admin 身份的 blog JWT。 */
+export function listAllProjectsForAdmin(token: string): Promise<ProjectSummary[]> {
+  return fetchJSON<ProjectSummary[]>("/admin-preview/projects", { headers: authHeader(token) });
+}
+
 /** 取本人草稿（含正文，按 ID 查，用于工作室预览）。 */
 export function getDraft(id: number, token: string): Promise<Post> {
   return fetchJSON<Post>(`/drafts/${id}`, { headers: authHeader(token) });

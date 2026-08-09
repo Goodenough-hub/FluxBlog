@@ -1,0 +1,66 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import Main from "@/components/Main.astro";
+import Card from "@/components/Card.astro";
+import Footer from "@/components/Footer.astro";
+import { getPublicProject, listAllPostsForAdmin } from "@/utils/blogApi";
+import config from "@/config";
+
+// admin 预览项目详情（SSR）。无登录/令牌失效 → 跳博客登录页。
+// project 元数据来自公开 /projects/:id（不涉敏），文章列表来自 /admin-preview/posts
+// 客户端按 projectId 过滤，含 private 文章。
+export const prerender = false;
+
+const idStr = Astro.params.id;
+const id = parseInt(idStr ?? "", 10);
+if (isNaN(id) || id <= 0) {
+  return new Response("Not Found", { status: 404 });
+}
+
+const token = Astro.cookies.get("fluxblog_token")?.value;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const loginUrl = `${base}login/?next=${encodeURIComponent(Astro.url.pathname)}`;
+
+if (!token) {
+  return Astro.redirect(loginUrl, 302);
+}
+
+let project;
+try {
+  project = await getPublicProject(id);
+} catch {
+  return new Response("Not Found", { status: 404 });
+}
+
+let all;
+try {
+  all = await listAllPostsForAdmin(token);
+} catch {
+  return Astro.redirect(loginUrl, 302);
+}
+
+const posts = all.filter(p => p.projectId === id);
+---
+
+<Layout title={`${project.name} | ${config.site.title}`}>
+  <Header />
+
+  <Breadcrumb />
+
+  <Main
+    pageTitle={project.name}
+    pageDesc={project.intro || `${posts.length} 篇文章`}
+  >
+    {posts.length === 0 ? (
+      <p class="text-muted-foreground">暂无文章。</p>
+    ) : (
+      <ul>
+        {posts.map(post => <Card post={post} linkBase="preview" />)}
+      </ul>
+    )}
+  </Main>
+
+  <Footer />
+</Layout>

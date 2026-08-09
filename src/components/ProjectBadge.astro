@@ -1,16 +1,24 @@
 ---
+import { getRelativeLocaleUrl } from "astro:i18n";
 import { getProjectUrlByID } from "@/utils/getPostPaths";
+import config from "@/config";
 
 interface Props {
   id: number;
   name: string;
+  /** 链接基础路径段，默认走 /projects/:id。admin 预览传 "preview" → /preview/projects/:id。 */
+  linkBase?: string;
 }
 
-const { id, name } = Astro.props;
+const { id, name, linkBase } = Astro.props;
+const locale = Astro.currentLocale ?? config.site.lang;
+const href = linkBase
+  ? getRelativeLocaleUrl(locale, `${linkBase}/projects/${id}`)
+  : getProjectUrlByID(id, Astro.currentLocale);
 ---
 
 <a
-  href={getProjectUrlByID(id, Astro.currentLocale)}
+  href={href}
   class="text-muted-foreground hover:text-accent inline-block rounded border border-border px-2 py-0.5 text-xs"
 >
   {name}
