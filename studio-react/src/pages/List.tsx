@@ -121,6 +121,12 @@ export default function ListPage() {
     });
   }, [drafts, searchTitle, filterProject, filterTag, filterVisibility]);
 
+  const projectMap = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const p of projects) m.set(p.id, p.name);
+    return m;
+  }, [projects]);
+
   const resetFilters = () => {
     setSearchTitle("");
     setFilterProject(null);
@@ -274,6 +280,27 @@ export default function ListPage() {
           ),
       },
       {
+        title: "项目",
+        dataIndex: "projectId",
+        key: "project",
+        width: 120,
+        render: (projectId: number | null | undefined) => {
+          if (projectId == null) {
+            return <span className="text-xs text-slate-400 dark:text-slate-500">—</span>;
+          }
+          const name = projectMap.get(projectId);
+          return name ? (
+            <Tag color="blue" className="m-0">
+              {name}
+            </Tag>
+          ) : (
+            <Tooltip title={`项目 ID ${projectId} 已删除`}>
+              <span className="text-xs text-amber-500">已删除</span>
+            </Tooltip>
+          );
+        },
+      },
+      {
         title: "标签",
         dataIndex: "tags",
         key: "tags",
@@ -409,9 +436,13 @@ export default function ListPage() {
                 )}
               </button>
             </Tooltip>
-            <Tooltip title="预览">
+            <Tooltip title={r.status === "published" ? "预览发布文章" : "预览草稿"}>
               <a
-                href={`/blog/drafts/${r.slug}`}
+                href={
+                  r.status === "published"
+                    ? `/blog/posts/${r.slug}`
+                    : `/blog/preview-draft/${r.id}`
+                }
                 target="_blank"
                 rel="noreferrer"
                 onClick={(e) => e.stopPropagation()}
@@ -457,7 +488,7 @@ export default function ListPage() {
         ),
       },
     ],
-    [navigate, publishLoadingId, visibilityLoadingId, togglePublish, toggleVisibility, delDraft]
+    [navigate, publishLoadingId, visibilityLoadingId, togglePublish, toggleVisibility, delDraft, projectMap]
   );
 
   const rowSelection: TableRowSelection<Draft> = {
