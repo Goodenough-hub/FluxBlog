@@ -1,22 +1,31 @@
 ---
+import { getRelativeLocaleUrl } from "astro:i18n";
 import { getPostUrlBySlug } from "@/utils/getPostPaths";
 import { toTransitionName } from "@/utils/toTransitionName";
 import Datetime from "./Datetime.astro";
 import ProjectBadge from "./ProjectBadge.astro";
 import type { PostSummary } from "@/utils/blogTypes";
+import config from "@/config";
 
 type Props = {
   variant?: "h2" | "h3";
   post: PostSummary;
+  /** 卡片标题链接的基础路径段，默认 "posts"。admin 预览页传 "preview"。
+   *  生成 URL 时会用 `${base}/${slug}` 替代默认的 `posts/${slug}`。 */
+  linkBase?: string;
 };
 
-const { variant: Heading = "h2", post } = Astro.props;
+const { variant: Heading = "h2", post, linkBase } = Astro.props;
 const { title, description, slug, publishedAt, updatedAt, projectId, projectName } = post;
+const locale = Astro.currentLocale ?? config.site.lang;
+const href = linkBase
+  ? getRelativeLocaleUrl(locale, `${linkBase}/${slug}`)
+  : getPostUrlBySlug(slug, locale);
 ---
 
 <li class="my-6">
   <a
-    href={getPostUrlBySlug(slug, Astro.currentLocale)}
+    href={href}
     class:list={[
       "text-accent inline-block text-lg font-medium",
       "decoration-dashed underline-offset-4 hover:underline",

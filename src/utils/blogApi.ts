@@ -61,6 +61,19 @@ export function getMyPrivatePost(slug: string, token: string): Promise<Post> {
   });
 }
 
+/** 列出所有已发布文档（公开+私有），供 admin 预览页 /blog/preview/ 使用。
+ *  走 admin-preview 端点，需要 admin 身份的 blog JWT。 */
+export function listAllPostsForAdmin(token: string): Promise<PostSummary[]> {
+  return fetchJSON<PostSummary[]>("/admin-preview/posts", { headers: authHeader(token) });
+}
+
+/** 取任意已发布文档（含正文，含 private），供 admin 预览详情页使用。 */
+export function getAdminPreviewPost(slug: string, token: string): Promise<Post> {
+  return fetchJSON<Post>(`/admin-preview/posts/${encodeURIComponent(slug)}`, {
+    headers: authHeader(token),
+  });
+}
+
 /** 取本人草稿（含正文，按 ID 查，用于工作室预览）。 */
 export function getDraft(id: number, token: string): Promise<Post> {
   return fetchJSON<Post>(`/drafts/${id}`, { headers: authHeader(token) });
