@@ -14,6 +14,7 @@ import BackButton from "./_components/BackButton.astro";
 import BackToTopButton from "./_components/BackToTopButton.astro";
 import AdjacentPostNav from "./_components/AdjacentPostNav.astro";
 import ProjectBadge from "@/components/ProjectBadge.astro";
+import TableOfContents from "@/components/TableOfContents.astro";
 import config from "@/config";
 
 // 公开文章页改为按需 SSR：从 AppPilot DB 取正文，服务端渲染。
@@ -69,11 +70,13 @@ const ogImage = ogImageUrl
 
   <BackButton />
 
-  <main
-    id="main-content"
-    class:list={["app-layout", { "mt-8": !config.features.showBackButton }]}
-    data-pagefind-body
-  >
+  <div class="app-layout flex gap-8">
+    <TableOfContents />
+    <main
+      id="main-content"
+      class:list={["min-w-0 flex-1", { "mt-8": !config.features.showBackButton }]}
+      data-pagefind-body
+    >
     <h1
       style={{ viewTransitionName: toTransitionName(title) }}
       class="text-accent inline-block text-2xl font-bold sm:text-3xl"
@@ -123,7 +126,8 @@ const ogImage = ogImageUrl
     <hr class="my-8 border-dashed" />
 
     <AdjacentPostNav prevPost={prevPost} nextPost={nextPost} />
-  </main>
+    </main>
+  </div>
   <Footer />
 </PostLayout>
 

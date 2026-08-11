@@ -2,6 +2,7 @@
 import PostLayout from "@/layouts/PostLayout.astro";
 import Header from "@/components/Header.astro";
 import BackToTopButton from "@/pages/posts/[...slug]/_components/BackToTopButton.astro";
+import TableOfContents from "@/components/TableOfContents.astro";
 import { getDraft } from "@/utils/blogApi";
 import { renderMarkdown } from "@/utils/renderMarkdown";
 import config from "@/config";
@@ -48,11 +49,13 @@ const { title, description, updatedAt, tags } = post;
 
   <Header />
 
-  <main
-    id="main-content"
-    class:list={["app-layout", "mt-8"]}
-    data-pagefind-ignore
-  >
+  <div class="app-layout flex gap-8">
+    <TableOfContents />
+    <main
+      id="main-content"
+      class:list={["min-w-0 flex-1", "mt-8"]}
+      data-pagefind-ignore
+    >
     <h1 class="text-accent inline-block text-2xl font-bold sm:text-3xl">
       {title}
     </h1>
@@ -78,13 +81,19 @@ const { title, description, updatedAt, tags } = post;
     <hr class="my-8 border-dashed" />
 
     <BackToTopButton />
-  </main>
+    </main>
+  </div>
 
   <!-- 工作室预览：禁用所有链接跳转，仅作展示用。正常 /blog/posts/<slug> 不受影响。 -->
+  <!-- TOC 链接带 data-toc-link 标记，由 TableOfContents 组件自己处理滚动，不被拦截。 -->
   <script is:inline>
+    function isTocLink(el) {
+      return el && el.closest && el.closest("a[data-toc-link]");
+    }
     document.addEventListener(
       "click",
       function (e) {
+        if (isTocLink(e.target)) return;
         var t = e.target;
         var el = t && t.closest ? t.closest("a") : null;
         if (el) {
@@ -97,6 +106,7 @@ const { title, description, updatedAt, tags } = post;
     document.addEventListener(
       "auxclick",
       function (e) {
+        if (isTocLink(e.target)) return;
         var t = e.target;
         var el = t && t.closest ? t.closest("a") : null;
         if (el) {
@@ -107,6 +117,7 @@ const { title, description, updatedAt, tags } = post;
       true
     );
     document.addEventListener("contextmenu", function (e) {
+      if (isTocLink(e.target)) return;
       var t = e.target;
       var el = t && t.closest ? t.closest("a") : null;
       if (el) e.preventDefault();
