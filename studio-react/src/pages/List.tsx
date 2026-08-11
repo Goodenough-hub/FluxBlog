@@ -48,9 +48,29 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function ListPage() {
-  const { ready, loggedIn, doLogout } = useAuth();
+  const { ready, loggedIn, isAdmin, doLogout } = useAuth();
   const navigate = useNavigate();
   const { message, modal, notification } = AntdApp.useApp();
+
+  useEffect(() => {
+    if (ready && !loggedIn) {
+      window.location.hash = "#/login";
+    }
+  }, [ready, loggedIn]);
+
+  // 非 admin 用户不让进 Studio：显示提示并退出
+  useEffect(() => {
+    if (ready && loggedIn && !isAdmin) {
+      modal.warning({
+        title: "无权访问",
+        content: "Studio 仅管理员可访问，你当前的账号无权限。",
+        okText: "退出登录",
+        onOk: () => {
+          void doLogout();
+        },
+      });
+    }
+  }, [ready, loggedIn, isAdmin, doLogout, modal]);
 
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -69,12 +89,6 @@ export default function ListPage() {
   const [filterVisibility, setFilterVisibility] = useState<
     "all" | "public" | "private"
   >("all");
-
-  useEffect(() => {
-    if (ready && !loggedIn) {
-      window.location.hash = "#/login";
-    }
-  }, [ready, loggedIn]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -498,6 +512,7 @@ export default function ListPage() {
   };
 
   if (!loggedIn) return null;
+  if (ready && loggedIn && !isAdmin) return null;
 
   const selectedCount = selectedRowKeys.length;
   const hasFilter =

@@ -63,7 +63,7 @@ function slugifyFromTitle(title: string): string {
 }
 
 export default function EditorPage() {
-  const { ready, loggedIn } = useAuth();
+  const { ready, loggedIn, isAdmin } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const { message, modal, notification } = AntdApp.useApp();
@@ -119,6 +119,20 @@ export default function EditorPage() {
       window.location.hash = "#/login";
     }
   }, [ready, loggedIn]);
+
+  // 非 admin 不让进 Studio 编辑器
+  useEffect(() => {
+    if (ready && loggedIn && !isAdmin) {
+      modal.warning({
+        title: "无权访问",
+        content: "Studio 仅管理员可访问，你当前的账号无权限。",
+        okText: "退出登录",
+        onOk: () => {
+          window.location.hash = "#/login";
+        },
+      });
+    }
+  }, [ready, loggedIn, isAdmin, modal]);
 
   useEffect(() => {
     if (!loggedIn) return;
@@ -459,6 +473,7 @@ export default function EditorPage() {
   );
 
   if (!loggedIn) return null;
+  if (ready && loggedIn && !isAdmin) return null;
 
   // 新建草稿态：弹出 slug+title 表单
   if (id === "new" && !draft) {

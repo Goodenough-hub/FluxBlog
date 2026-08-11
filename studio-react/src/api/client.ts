@@ -122,6 +122,18 @@ export async function logout(): Promise<void> {
   }
 }
 
+export interface MeResponse {
+  userId: string;
+  username: string;
+  isEnabled: boolean;
+  tokenVersion: number;
+  isAdmin: boolean;
+}
+
+export async function fetchMe(): Promise<MeResponse> {
+  return api<MeResponse>("/auth/me");
+}
+
 export interface Draft {
   id: number;
   slug: string;
