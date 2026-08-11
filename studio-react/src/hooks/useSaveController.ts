@@ -36,7 +36,7 @@ interface UseSaveControllerOptions {
 export function useSaveController({
   draftId,
   baseVersion,
-  debounceMs = 8000,
+  debounceMs = 3000,
   onConflict,
   seededInput,
 }: UseSaveControllerOptions) {
