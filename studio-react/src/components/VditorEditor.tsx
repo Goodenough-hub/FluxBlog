@@ -1,10 +1,20 @@
-import { useEffect, useRef } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+} from "react";
 import Vditor from "vditor";
 import {
   prepareImage,
   uploadImage,
   isAcceptedImage,
 } from "../lib/image-utils";
+
+export interface VditorEditorHandle {
+  // 取 Vditor 内部滚动元素（.vditor-sv），供 useScrollSync 用
+  getScrollEl: () => HTMLElement | null;
+}
 
 export interface VditorEditorProps {
   value: string;
@@ -18,13 +28,17 @@ export interface VditorEditorProps {
 // - 关闭内置 preview（左预览由 PreviewFrame 走 FluxBlog 发布态渲染管线）
 // - upload.handler 接 image-utils 的 WebP/EXIF 预处理 + cookie 上传
 // - theme 跟随 html[data-theme]（与 Antd 一致，由 MutationObserver 同步）
-export default function VditorEditor({
-  value,
-  draftId,
-  onChange,
-}: VditorEditorProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const vditorRef = useRef<Vditor | null>(null);
+const VditorEditor = forwardRef<VditorEditorHandle, VditorEditorProps>(
+  function VditorEditor({ value, draftId, onChange }, ref) {
+    const rootRef = useRef<HTMLDivElement>(null);
+    const vditorRef = useRef<Vditor | null>(null);
+
+    useImperativeHandle(ref, () => ({
+      getScrollEl: () => {
+        const el = rootRef.current?.querySelector<HTMLElement>(".vditor-sv");
+        return el ?? null;
+      },
+    }));
   // onChange 通过 ref 透传，避免每次重渲染都重建 Vditor
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -146,5 +160,8 @@ export default function VditorEditor({
     }
   }, [value]);
 
-  return <div ref={rootRef} className="st-vditor-host h-full w-full" />;
-}
+    return <div ref={rootRef} className="st-vditor-host h-full w-full" />;
+  }
+);
+
+export default VditorEditor;

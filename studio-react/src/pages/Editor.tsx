@@ -32,12 +32,17 @@ import {
   useSaveController,
   type SaveInput,
 } from "../hooks/useSaveController";
-import VditorEditor from "../components/VditorEditor";
-import PreviewFrame from "../components/PreviewFrame";
+import VditorEditor, {
+  type VditorEditorHandle,
+} from "../components/VditorEditor";
+import PreviewFrame, {
+  type PreviewFrameHandle,
+} from "../components/PreviewFrame";
 import MetaDrawer, { type MetaFormValue } from "../components/MetaDrawer";
 import HistoryDrawer from "../components/HistoryDrawer";
 import ConflictModal, { type ConflictInfo } from "../components/ConflictModal";
 import PublishModal, { type PublishFormValue } from "../components/PublishModal";
+import { useScrollSync } from "../hooks/useScrollSync";
 
 const STATUS_COLOR: Record<string, string> = {
   draft: "default",
@@ -80,6 +85,34 @@ export default function EditorPage() {
   const previewSlug = slugifyFromTitle(watchedTitle) || "your-post";
 
   const loadedRef = useRef(false);
+  const editorRef = useRef<VditorEditorHandle>(null);
+  const previewRef = useRef<PreviewFrameHandle>(null);
+  // 滚动元素需要在 iframe 加载后、Vditor 渲染后才能拿到，所以用 state 触发重渲染
+  const [editorScrollEl, setEditorScrollEl] = useState<HTMLElement | null>(null);
+  const [previewScrollEl, setPreviewScrollEl] = useState<HTMLElement | null>(null);
+  const [previewReady, setPreviewReady] = useState(0);
+  useScrollSync(editorScrollEl, previewScrollEl);
+
+  // 轮询拿滚动元素：Vditor/iframe 都是异步挂载，没有现成事件可监听。
+  // 拿到后停止轮询；草稿切换或 iframe 重载（previewReady 变化）时清空重新探测。
+  useEffect(() => {
+    if (!draft) return;
+    setEditorScrollEl(null);
+    setPreviewScrollEl(null);
+    let stopped = false;
+    const id = window.setInterval(() => {
+      if (stopped) return;
+      const e = editorRef.current?.getScrollEl() ?? null;
+      const p = previewRef.current?.getScrollEl() ?? null;
+      if (e) setEditorScrollEl(e);
+      if (p) setPreviewScrollEl(p);
+      if (e && p) window.clearInterval(id);
+    }, 200);
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+    };
+  }, [draft, previewReady]);
 
   useEffect(() => {
     if (ready && !loggedIn) {
@@ -580,7 +613,12 @@ export default function EditorPage() {
         <section className="flex min-w-0 flex-1 flex-col border-r border-slate-200/80 dark:border-strokedark">
           <PaneHeader label="预览" hint="实时渲染发布态（remark/rehype + Shiki + KaTeX + Mermaid）" />
           <div className="min-h-0 flex-1 overflow-hidden bg-white dark:bg-boxdark">
-            <PreviewFrame draftId={draft.id} reloadKey={sc.savedVersion} />
+            <PreviewFrame
+              ref={previewRef}
+              draftId={draft.id}
+              reloadKey={sc.savedVersion}
+              onReady={() => setPreviewReady((n) => n + 1)}
+            />
           </div>
         </section>
         {/* 右：编辑 */}
@@ -588,6 +626,7 @@ export default function EditorPage() {
           <PaneHeader label="编辑" hint="Vditor · ir 模式 · 工具栏上传图片自动转 WebP" />
           <div className="min-h-0 flex-1 overflow-hidden">
             <VditorEditor
+              ref={editorRef}
               key={draft.id}
               value={markdown}
               draftId={draft.id}
