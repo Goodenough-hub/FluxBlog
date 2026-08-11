@@ -12,6 +12,7 @@ import BackButton from "@/pages/posts/[...slug]/_components/BackButton.astro";
 import BackToTopButton from "@/pages/posts/[...slug]/_components/BackToTopButton.astro";
 import ProjectBadge from "@/components/ProjectBadge.astro";
 import TableOfContents from "@/components/TableOfContents.astro";
+import { extractHeadings } from "@/utils/extractHeadings";
 import config from "@/config";
 
 // admin 预览详情页（SSR）。无登录/401 → 跳登录页；404 → 404。
@@ -46,6 +47,7 @@ if (notFound || !post) {
 }
 
 const html = await renderMarkdown(post.markdown);
+const tocHeadings = extractHeadings(post.markdown);
 const { title, description, publishedAt, updatedAt, tags } = post;
 const visibilityLabel = post.visibility === "private" ? "🔒 私有" : "🌐 公开";
 ---
@@ -64,8 +66,9 @@ const visibilityLabel = post.visibility === "private" ? "🔒 私有" : "🌐 �
 
   <BackButton />
 
+  <TableOfContents headings={tocHeadings} />
+
   <div class="app-layout flex gap-8">
-    <TableOfContents />
     <main
       id="main-content"
       class:list={["min-w-0 flex-1", { "mt-8": !config.features.showBackButton }]}
@@ -108,7 +111,7 @@ const visibilityLabel = post.visibility === "private" ? "🔒 私有" : "🌐 �
     <ul class="mt-4 mb-8 flex flex-wrap gap-4 sm:my-8">
       {tags.map(tag => <Tag tag={slugifyStr(tag)} tagName={tag} size="sm" linkBase="preview" />)}
     </ul>
-    </main>
+  </main>
   </div>
   <Footer />
 </PostLayout>

@@ -1,151 +1,194 @@
 ---
-// 文章左侧目录：客户端扫描 #main-content 内的 h1/h2/h3，动态生成目录树。
-// - 点击跳转：anchor href="#<id>"
-// - 滚动高亮：IntersectionObserver 监听 heading 进入视口
-// - 展开/收起：toggle 按钮切换 nav 可见
-// - 移动端隐藏（lg:block），不抢阅读空间
-// heading id 由 remark-toc 在 SSR 时生成，无需额外处理。
+// 文章目录（Josh Comeau / Lee Robinson 风格）
+// - 服务端渲染 TOC 列表（从 markdown 提取 headings 作为 props）
+// - sticky 定位，贴右侧或左侧
+// - 当前可见 heading：左侧 2px 强调色竖条 + 加粗 + 强调色文字
+// - CSS transition 平滑切换激活态
+// - 点击平滑滚动
+// - 移动端隐藏
+import type { TocHeading } from "@/utils/extractHeadings";
+export interface Props {
+  headings: TocHeading[];
+}
+const { headings } = Astro.props;
+if (headings.length === 0) return;
 ---
 
 <aside
   id="toc-aside"
-  class="sticky top-20 hidden shrink-0 self-start lg:block"
-  aria-label="文章目录"
+  class="toc"
+  aria-label="目录"
 >
-  <div class="flex items-center justify-between px-3 py-2">
-    <span class="text-xs font-medium uppercase tracking-wide text-foreground/60">
-      目录
-    </span>
-    <button
-      id="toc-toggle"
-      type="button"
-      class="text-xs text-foreground/50 hover:text-foreground"
-      aria-expanded="true"
-      aria-controls="toc-nav"
-    >
-      收起
-    </button>
-  </div>
-  <nav
-    id="toc-nav"
-    class="max-h-[calc(100vh-8rem)] overflow-y-auto pe-3 ps-3 text-sm"
-  >
-    <ol id="toc-list" class="m-0 list-none space-y-1 p-0"></ol>
+  <p class="toc-label">目录</p>
+  <nav>
+    <ol class="toc-list">
+      {
+        headings.map((h) => (
+          <li class="toc-item" data-depth={h.depth}>
+            <a
+              href={`#${h.id}`}
+              class="toc-link"
+              data-toc-link
+              data-toc-id={h.id}
+            >
+              {h.text}
+            </a>
+          </li>
+        ))
+      }
+    </ol>
   </nav>
 </aside>
 
-<script is:inline>
-  (function () {
-    const aside = document.getElementById("toc-aside");
-    if (!aside) return;
-    const list = document.getElementById("toc-list");
-    const nav = document.getElementById("toc-nav");
-    const toggle = document.getElementById("toc-toggle");
-    if (!list || !nav || !toggle) return;
-
-    const main = document.getElementById("main-content");
-    if (!main) return;
-
-    // 扫描 h1/h2/h3。h1 通常是文章标题，作为顶层；h2/h3 嵌套。
-    const headings = Array.from(
-      main.querySelectorAll("h1, h2, h3")
-    ).filter((h) => h.id);
-
-    if (headings.length === 0) {
-      aside.style.display = "none";
-      return;
-    }
-
-    // 构建嵌套 <ol>：h1 顶层，h2 子层，h3 孙层。
-    // 简化策略：所有项放在同一 <ol>，用 data-level 标记层级，CSS 控制缩进。
-    const frag = document.createDocumentFragment();
-    let currentActive = null;
-
-    for (const h of headings) {
-      const level = h.tagName.toLowerCase(); // h1 | h2 | h3
-      const li = document.createElement("li");
-      li.setAttribute("data-level", level);
-      li.className = "toc-item";
-      const a = document.createElement("a");
-      a.href = "#" + h.id;
-      a.setAttribute("data-toc-link", "");
-      a.textContent = h.textContent.replace(/#$/, "").trim();
-      a.className = "toc-link block border-s-2 border-transparent py-1 ps-2 text-foreground/60 hover:text-foreground";
-      // 阻止默认 anchor 跳转，改用 scrollIntoView 平滑滚动（避免 URL hash 残留）
-      a.addEventListener("click", (e) => {
-        e.preventDefault();
-        h.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-      li.appendChild(a);
-      frag.appendChild(li);
-    }
-    list.appendChild(frag);
-
-    // 展开/收起
-    let collapsed = false;
-    toggle.addEventListener("click", () => {
-      collapsed = !collapsed;
-      nav.style.display = collapsed ? "none" : "";
-      toggle.textContent = collapsed ? "展开" : "收起";
-      toggle.setAttribute("aria-expanded", String(!collapsed));
-    });
-
-    // 滚动高亮：用 IntersectionObserver 找当前可视 heading。
-    // rootMargin 上 20% 视口高度作为"激活线"，下 -70% 让上方 heading 失活。
-    const links = Array.from(list.querySelectorAll("a"));
-    const linkById = new Map();
-    for (const a of links) {
-      linkById.set(a.getAttribute("href").slice(1), a);
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // 找出所有 isIntersecting 的 heading，选最靠上的那个作为当前
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible.length === 0) return;
-        const activeId = visible[0].target.id;
-        const activeLink = linkById.get(activeId);
-        if (!activeLink || activeLink === currentActive) return;
-        if (currentActive) {
-          currentActive.classList.remove("toc-active");
-          currentActive.classList.add("text-foreground/60");
-          currentActive.classList.remove("text-accent", "border-accent");
-          currentActive.classList.add("border-transparent");
-        }
-        activeLink.classList.add("toc-active");
-        activeLink.classList.remove("text-foreground/60");
-        activeLink.classList.add("text-accent", "border-accent");
-        activeLink.classList.remove("border-transparent");
-        currentActive = activeLink;
-      },
-      {
-        rootMargin: "0px 0px -70% 0px",
-        threshold: [0, 1],
-      }
-    );
-
-    for (const h of headings) {
-      observer.observe(h);
-    }
-  })();
-</script>
-
 <style>
-  .toc-item[data-level="h2"] .toc-link {
-    padding-inline-start: 0.75rem;
+  .toc {
+    position: sticky;
+    top: 5rem;
+    align-self: flex-start;
+    flex-shrink: 0;
+    width: 20rem;
+    max-height: calc(100vh - 6rem);
+    overflow-y: auto;
+    padding: 0.5rem 0 0.5rem 1rem;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    /* 左侧分隔线，贴近正文内容 */
+    border-left: 1px solid var(--color-border);
   }
-  .toc-item[data-level="h3"] .toc-link {
+
+  @media (max-width: 1279.98px) {
+    .toc { display: none; }
+  }
+
+  .toc-label {
+    margin: 0 0 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted-foreground);
+  }
+
+  .toc-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .toc-item {
+    margin: 0;
+    padding: 0;
+  }
+
+  .toc-link {
+    display: block;
+    padding: 0.2rem 0.5rem 0.2rem 0.75rem;
+    color: var(--color-muted-foreground);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .toc-link:hover {
+    color: var(--color-foreground);
+    background: var(--color-muted);
+  }
+
+  /* 层级缩进 */
+  .toc-item[data-depth="3"] .toc-link {
     padding-inline-start: 1.5rem;
     font-size: 0.8125rem;
   }
-  /* 滚动条收窄 */
-  #toc-nav::-webkit-scrollbar {
-    width: 4px;
+
+  /* 当前激活项 */
+  .toc-link.active {
+    color: var(--color-accent);
+    border-left-color: var(--color-accent);
+    font-weight: 500;
+    background: color-mix(in srgb, var(--color-accent) 6%, transparent);
   }
-  #toc-nav::-webkit-scrollbar-thumb {
-    background: var(--muted);
+
+  /* 滚动条 */
+  .toc::-webkit-scrollbar { width: 4px; }
+  .toc::-webkit-scrollbar-thumb {
+    background: var(--color-muted);
     border-radius: 2px;
   }
+  .toc {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-muted) transparent;
+  }
 </style>
+
+<script is:inline>
+  (function () {
+    // DOMContentLoaded 后初始化 scroll spy
+    function init() {
+      const links = Array.from(
+        document.querySelectorAll(".toc-link[data-toc-id]")
+      );
+      if (links.length === 0) return;
+
+      const linkById = new Map();
+      for (const a of links) {
+        linkById.set(a.dataset.tocId, a);
+      }
+
+      const headings = Array.from(
+        document.querySelectorAll("h2[id], h3[id]")
+      ).filter((h) => linkById.has(h.id));
+
+      if (headings.length === 0) return;
+
+      let currentActive = null;
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          let best = null;
+          let bestTop = Infinity;
+          for (const e of entries) {
+            if (e.isIntersecting && e.boundingClientRect.top < bestTop) {
+              best = e.target;
+              bestTop = e.boundingClientRect.top;
+            }
+          }
+          if (!best) {
+            for (const h of headings) {
+              const rect = h.getBoundingClientRect();
+              if (rect.top > 80) break;
+              best = h;
+            }
+          }
+          if (!best) return;
+          const link = linkById.get(best.id);
+          if (!link || link === currentActive) return;
+          if (currentActive) currentActive.classList.remove("active");
+          link.classList.add("active");
+          currentActive = link;
+
+          const nav = link.closest("nav");
+          if (nav) {
+            const nr = nav.getBoundingClientRect();
+            const lr = link.getBoundingClientRect();
+            if (lr.top < nr.top + 20 || lr.bottom > nr.bottom - 20) {
+              link.scrollIntoView({ block: "nearest" });
+            }
+          }
+        },
+        { rootMargin: "-80px 0px -70% 0px", threshold: [0, 1] }
+      );
+
+      for (const h of headings) observer.observe(h);
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+  })();
+</script>

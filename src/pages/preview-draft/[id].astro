@@ -3,6 +3,7 @@ import PostLayout from "@/layouts/PostLayout.astro";
 import Header from "@/components/Header.astro";
 import BackToTopButton from "@/pages/posts/[...slug]/_components/BackToTopButton.astro";
 import TableOfContents from "@/components/TableOfContents.astro";
+import { extractHeadings } from "@/utils/extractHeadings";
 import { getDraft } from "@/utils/blogApi";
 import { renderMarkdown } from "@/utils/renderMarkdown";
 import config from "@/config";
@@ -35,6 +36,7 @@ if (!post) {
 }
 
 const html = await renderMarkdown(post.markdown);
+const tocHeadings = extractHeadings(post.markdown);
 const { title, description, updatedAt, tags } = post;
 ---
 
@@ -49,8 +51,9 @@ const { title, description, updatedAt, tags } = post;
 
   <Header />
 
+  <TableOfContents headings={tocHeadings} />
+
   <div class="app-layout flex gap-8">
-    <TableOfContents />
     <main
       id="main-content"
       class:list={["min-w-0 flex-1", "mt-8"]}
@@ -81,7 +84,7 @@ const { title, description, updatedAt, tags } = post;
     <hr class="my-8 border-dashed" />
 
     <BackToTopButton />
-    </main>
+  </main>
   </div>
 
   <!-- 工作室预览：禁用所有链接跳转，仅作展示用。正常 /blog/posts/<slug> 不受影响。 -->

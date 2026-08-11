@@ -15,6 +15,7 @@ import BackToTopButton from "./_components/BackToTopButton.astro";
 import AdjacentPostNav from "./_components/AdjacentPostNav.astro";
 import ProjectBadge from "@/components/ProjectBadge.astro";
 import TableOfContents from "@/components/TableOfContents.astro";
+import { extractHeadings } from "@/utils/extractHeadings";
 import config from "@/config";
 
 // 公开文章页改为按需 SSR：从 AppPilot DB 取正文，服务端渲染。
@@ -34,6 +35,7 @@ try {
 }
 
 const html = await renderMarkdown(post.markdown);
+const tocHeadings = extractHeadings(post.markdown);
 const locale = Astro.currentLocale ?? config.site.lang;
 const { title, description, cover, publishedAt, updatedAt, tags } = post;
 
@@ -70,8 +72,9 @@ const ogImage = ogImageUrl
 
   <BackButton />
 
+  <TableOfContents headings={tocHeadings} />
+
   <div class="app-layout flex gap-8">
-    <TableOfContents />
     <main
       id="main-content"
       class:list={["min-w-0 flex-1", { "mt-8": !config.features.showBackButton }]}
@@ -126,7 +129,7 @@ const ogImage = ogImageUrl
     <hr class="my-8 border-dashed" />
 
     <AdjacentPostNav prevPost={prevPost} nextPost={nextPost} />
-    </main>
+  </main>
   </div>
   <Footer />
 </PostLayout>
