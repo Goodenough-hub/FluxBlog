@@ -25,6 +25,10 @@ interface UseSaveControllerOptions {
   baseVersion: number;
   debounceMs?: number;
   onConflict?: (info: ConflictInfo) => void;
+  /** autosave 成功后被调用，参数为服务端返回的最新 Draft。
+   *  用于父组件同步 draft 状态（version / hasUnpublishedChanges / status 等），
+   *  否则父组件的 draft 会停留在初次加载值，"更新发布"按钮无法响应元数据修改。 */
+  onSaved?: (draft: Draft) => void;
   /** 加载草稿后传入与服务端一致的 input，用作 lastSavedInputRef 初值，
    *  避免用户重新进入编辑器但未做任何修改时仍触发 8s 自动保存。 */
   seededInput?: SaveInput | null;
@@ -38,6 +42,7 @@ export function useSaveController({
   baseVersion,
   debounceMs = 3000,
   onConflict,
+  onSaved,
   seededInput,
 }: UseSaveControllerOptions) {
   const [state, setState] = useState<SaveState>("idle");
@@ -51,6 +56,8 @@ export function useSaveController({
   const stateRef = useRef<SaveState>("idle");
   const onConflictRef = useRef(onConflict);
   onConflictRef.current = onConflict;
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
   const draftIdRef = useRef(draftId);
   draftIdRef.current = draftId;
   // baseVersion 通过 ref 每次渲染同步；pump/flush/dosave 都从 ref 取，
@@ -95,6 +102,8 @@ export function useSaveController({
         // 立即同步 baseVersionRef，避免 .finally 里 pump 再次触发时仍用旧 version
         baseVersionRef.current = updated.version;
         lastSavedInputRef.current = input;
+        // 回调父组件，让 draft 状态与服务端同步（含 hasUnpublishedChanges 等）
+        onSavedRef.current?.(updated);
         setSavedVersion(updated.version);
         setStateSafe("idle");
       } catch (err: any) {

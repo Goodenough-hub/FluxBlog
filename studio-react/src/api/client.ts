@@ -168,6 +168,7 @@ export const draftsApi = {
   async create(input: {
     slug: string;
     title: string;
+    description?: string;
     markdown?: string;
     visibility?: "public" | "private";
   }): Promise<Draft> {
@@ -265,7 +266,11 @@ export const tagsApi = {
 
 export const projectsApi = {
   async list(): Promise<Project[]> {
-    return api<Project[]>("/projects");
+    // Studio 是 admin-only 界面：需要看到所有项目（含没有已发布公开文章的），
+    // 所以走 admin-preview 全表 endpoint，而非公开的 /projects（后者带
+    // HAVING COUNT(published_public) > 0 过滤，会把纯草稿/私有的项目藏起来，
+    // 导致 List 页把归属这些项目的草稿误标"已删除"）。
+    return api<Project[]>("/admin-preview/projects");
   },
   async create(input: { name: string; intro?: string }): Promise<Project> {
     return api<Project>("/projects", {

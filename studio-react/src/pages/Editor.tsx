@@ -80,7 +80,7 @@ export default function EditorPage() {
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [newForm] = Form.useForm<{ title: string }>();
+  const [newForm] = Form.useForm<{ title: string; description?: string }>();
   const watchedTitle = Form.useWatch("title", newForm) ?? "";
   const previewSlug = slugifyFromTitle(watchedTitle) || "your-post";
 
@@ -169,6 +169,7 @@ export default function EditorPage() {
     draftId: draft?.id ?? 0,
     baseVersion,
     onConflict,
+    onSaved: setDraft,
     seededInput,
   });
 
@@ -260,7 +261,7 @@ export default function EditorPage() {
   }, [sc]);
 
   // 处理新建草稿提交
-  const onCreate = async (v: { title: string }) => {
+  const onCreate = async (v: { title: string; description?: string }) => {
     setCreating(true);
     try {
       const baseSlug = slugifyFromTitle(v.title);
@@ -268,6 +269,7 @@ export default function EditorPage() {
         message.error("无法从标题生成网址路径，请使用更明确的标题");
         return;
       }
+      const description = v.description?.trim() || undefined;
       let slug = baseSlug;
       let d: Draft | null = null;
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -275,6 +277,7 @@ export default function EditorPage() {
           d = await draftsApi.create({
             slug,
             title: v.title,
+            description,
             markdown: "",
             visibility: "public",
           });
@@ -389,9 +392,9 @@ export default function EditorPage() {
     [draft, sc, message, notification, navigate]
   );
 
-  // 更新发布：已发布文章修改后，直接用原有项目/标签/可见性同步到博客。
-  // 不弹窗，用户在 MetaDrawer 改的项目/标签会随下次自动保存写回草稿，
-  // 这里 flush 后调 publish 把当前 version 提升为 publishedVersion。
+  // 更新发布：已发布文章修改后，直接把当前版本提升为 publishedVersion。
+  // flush 已经把 MetaDrawer 里最新的 title/description/tags/projectId/visibility PATCH 到 DB，
+  // publish 空 body 即可让后端沿用 DB 现值（handler.publish L714-721 + repository.PublishDraft L505-517）。
   const onRepublish = useCallback(async () => {
     if (!draft) return;
     setPublishLoading(true);
@@ -402,11 +405,7 @@ export default function EditorPage() {
         message.error("有未保存的冲突，请先解决版本冲突再更新发布");
         return;
       }
-      await draftsApi.publish(draft.id, {
-        visibility: draft.visibility,
-        projectId: draft.projectId ?? null,
-        tags: draft.tags ?? [],
-      });
+      await draftsApi.publish(draft.id, {});
       notification.success({
         message: `已更新发布：/blog/posts/${draft.slug}`,
         duration: 4,
@@ -490,7 +489,7 @@ export default function EditorPage() {
             form={newForm}
             layout="vertical"
             onFinish={onCreate}
-            initialValues={{ title: "" }}
+            initialValues={{ title: "", description: "" }}
           >
             <Form.Item
               label="标题"
@@ -498,6 +497,13 @@ export default function EditorPage() {
               rules={[{ required: true, message: "标题必填" }]}
             >
               <Input placeholder="文章标题" autoFocus />
+            </Form.Item>
+            <Form.Item label="摘要（可选）" name="description">
+              <Input.TextArea
+                rows={2}
+                placeholder="一句话摘要，也可稍后在文章信息里补充"
+                maxLength={200}
+              />
             </Form.Item>
             <Form.Item label="访问地址（自动生成，不可修改）">
               <Input
@@ -656,7 +662,11 @@ export default function EditorPage() {
         onClose={() => setMetaDrawerOpen(false)}
         draft={draft}
         projects={projects}
-        onChange={(m) => setMeta(m)}
+        onChange={(m) =>
+          // MetaDrawer 的表单不含 slug（slug 由标题自动生成、创建后不可修改），
+          // 这里合并而非替换，避免丢失 meta.slug 导致后续 PATCH 少发 slug 字段。
+          setMeta((prev) => (prev ? { ...prev, ...m } : m))
+        }
       />
       <HistoryDrawer
         open={historyDrawerOpen}
