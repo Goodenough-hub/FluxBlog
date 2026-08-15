@@ -41,6 +41,40 @@
   color: #fff;
   cursor: pointer;
 }
+.studio-card .password-wrap {
+  position: relative;
+}
+.studio-card .password-wrap input {
+  width: 100%;
+  padding-right: 44px;
+  box-sizing: border-box;
+}
+.studio-card .password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground, #888);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.studio-card .password-toggle:hover {
+  color: var(--foreground, #000);
+  background: transparent;
+}
+.studio-card .password-toggle:focus-visible {
+  outline: 2px solid var(--accent, #6366f1);
+  outline-offset: 1px;
+}
 .studio-hint {
   color: var(--muted-foreground, #888);
   font-size: 13px;
