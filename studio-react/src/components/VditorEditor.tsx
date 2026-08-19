@@ -71,22 +71,27 @@ const VditorEditor = forwardRef<VditorEditorHandle, VditorEditorProps>(
       upload: {
         accept: "image/*",
         multiple: true,
+        // Vditor 约定：handler 返回非空字符串会被当作错误信息弹窗显示。
+        // 故上传成功后直接用 vditor.insertValue 插入 Markdown，返回 null。
         handler: (files: File[]) => {
           return (async () => {
             const valid = files.filter(isAcceptedImage);
             if (!valid.length) return null;
-            const urls: string[] = [];
+            const markdowns: string[] = [];
             for (const f of valid) {
               try {
                 const prepared = await prepareImage(f);
                 const url = await uploadImage(prepared, draftIdRef.current);
-                urls.push(`![${f.name.replace(/\.[^.]+$/, "")}](${url})`);
+                markdowns.push(`![${f.name.replace(/\.[^.]+$/, "")}](${url})`);
               } catch (e) {
                 console.error("vditor upload failed", e);
+                return e instanceof Error ? e.message : "图片上传失败";
               }
             }
-            if (!urls.length) return null;
-            return urls.join("\n");
+            if (markdowns.length) {
+              vditor.insertValue(markdowns.join("\n"));
+            }
+            return null;
           })() as Promise<string>;
         },
       },
