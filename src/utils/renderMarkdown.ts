@@ -25,10 +25,8 @@ import rehypeKatex from "rehype-katex";
 import rehypeStringify from "rehype-stringify";
 import rehypeShiki from "@shikijs/rehype";
 import remarkMermaid from "./remark-mermaid";
-import {
-  shikiThemes,
-  shikiTransformers,
-} from "./markdownPlugins";
+import rehypeSourcePosition from "./rehype-source-position";
+import { shikiThemes, shikiTransformers } from "./markdownPlugins";
 
 const processor = unified()
   .use(remarkParse)
@@ -47,6 +45,7 @@ const processor = unified()
     transformers: shikiTransformers,
     defaultColor: false,
   })
+  .use(rehypeSourcePosition)
   .use(rehypeStringify);
 
 /** renderMarkdown 把 markdown 字符串渲染为 HTML 片段（服务端）。 */

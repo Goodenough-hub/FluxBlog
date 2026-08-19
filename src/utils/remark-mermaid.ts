@@ -18,9 +18,15 @@ export default function remarkMermaid() {
         parent &&
         Array.isArray(parent.children)
       ) {
+        const sourcePosition = node.position;
+        const sourceAttrs =
+          sourcePosition?.start?.line && sourcePosition?.end?.line
+            ? ` data-source-start="${sourcePosition.start.line}" data-source-end="${sourcePosition.end.line}"`
+            : "";
         parent.children[index] = {
           type: "html",
-          value: `<div class="mermaid" data-mermaid>${escapeHtml(node.value ?? "")}</div>`,
+          value: `<div class="mermaid" data-mermaid${sourceAttrs}>${escapeHtml(node.value ?? "")}</div>`,
+          position: sourcePosition,
         };
         return;
       }

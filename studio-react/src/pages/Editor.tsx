@@ -90,8 +90,10 @@ export default function EditorPage() {
   // 滚动元素需要在 iframe 加载后、Vditor 渲染后才能拿到，所以用 state 触发重渲染
   const [editorScrollEl, setEditorScrollEl] = useState<HTMLElement | null>(null);
   const [previewScrollEl, setPreviewScrollEl] = useState<HTMLElement | null>(null);
-  const [previewReady, setPreviewReady] = useState(0);
-  useScrollSync(editorScrollEl, previewScrollEl);
+  const scrollSync = useScrollSync(editorScrollEl, previewScrollEl, {
+    markdown,
+    scopeKey: draft?.id ?? 0,
+  });
 
   // 轮询拿滚动元素：Vditor/iframe 都是异步挂载，没有现成事件可监听。
   // 拿到后停止轮询；草稿切换或 iframe 重载（previewReady 变化）时清空重新探测。
@@ -112,7 +114,7 @@ export default function EditorPage() {
       stopped = true;
       window.clearInterval(id);
     };
-  }, [draft, previewReady]);
+  }, [draft?.id]);
 
   useEffect(() => {
     if (ready && !loggedIn) {
@@ -638,7 +640,11 @@ export default function EditorPage() {
               ref={previewRef}
               draftId={draft.id}
               reloadKey={sc.savedVersion}
-              onReady={() => setPreviewReady((n) => n + 1)}
+              onBeforeReload={scrollSync.captureEditorPosition}
+              onReady={scrollElement => {
+                scrollSync.restorePreviewPosition(scrollElement);
+                setPreviewScrollEl(scrollElement);
+              }}
             />
           </div>
         </section>
