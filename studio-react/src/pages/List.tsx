@@ -26,7 +26,6 @@ import {
   FiUploadCloud,
   FiArrowDownCircle,
 } from "react-icons/fi";
-import dayjs from "dayjs";
 import { useAuth } from "../hooks/useAuth";
 import {
   draftsApi,
@@ -34,6 +33,7 @@ import {
   type Draft,
   type Project,
 } from "../api/client";
+import { formatDraftDate } from "../lib/draft-date";
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   draft: { label: "草稿", color: "default" },
@@ -405,24 +405,18 @@ export default function ListPage() {
         ),
       },
       {
-        title: "更新",
+        title: "发布时间",
+        dataIndex: "publishedAt",
+        key: "publishedAt",
+        width: 140,
+        render: (value: string | null | undefined) => <DraftDate value={value} />,
+      },
+      {
+        title: "更新时间",
         dataIndex: "updatedAt",
         key: "updatedAt",
         width: 140,
-        render: (t: string) => {
-          if (!t) return <span className="text-slate-400">—</span>;
-          const d = dayjs(t);
-          return (
-            <div className="flex flex-col leading-tight">
-              <span className="font-medium text-slate-700 dark:text-slate-200">
-                {d.format("MM-DD HH:mm")}
-              </span>
-              <span className="text-xs text-slate-400 dark:text-slate-500">
-                {d.format("YYYY")}
-              </span>
-            </div>
-          );
-        },
+        render: (value: string | null | undefined) => <DraftDate value={value} />,
       },
       {
         title: "操作",
@@ -635,7 +629,7 @@ export default function ListPage() {
             dataSource={filtered}
             columns={columns}
             loading={loading}
-            scroll={{ x: 1180 }}
+            scroll={{ x: 1320 }}
             pagination={{
               position: ["bottomRight"],
               pageSize: 10,
@@ -666,6 +660,22 @@ export default function ListPage() {
           />
         </div>
       </section>
+    </div>
+  );
+}
+
+function DraftDate({ value }: { value?: string | null }) {
+  const formatted = formatDraftDate(value);
+  if (!formatted) return <span className="text-slate-400">—</span>;
+
+  return (
+    <div className="flex flex-col leading-tight">
+      <span className="font-medium text-slate-700 dark:text-slate-200">
+        {formatted.dateTime}
+      </span>
+      <span className="text-xs text-slate-400 dark:text-slate-500">
+        {formatted.year}
+      </span>
     </div>
   );
 }

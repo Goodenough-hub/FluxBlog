@@ -147,6 +147,7 @@ export interface Draft {
   version: number;
   projectId?: number | null;
   publishedVersion?: number | null;
+  publishedAt?: string | null;
   hasUnpublishedChanges?: boolean;
   scheduledPublishAt?: string | null;
   createdAt?: string;
