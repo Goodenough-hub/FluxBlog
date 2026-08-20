@@ -263,6 +263,15 @@ export const tagsApi = {
     const r = await api<{ tags: string[] | null }>("/tags");
     return r.tags ?? [];
   },
+  async rename(
+    oldName: string,
+    newName: string
+  ): Promise<{ oldName: string; newName: string; updatedDrafts: number }> {
+    return api("/tags", {
+      method: "PATCH",
+      body: JSON.stringify({ oldName, newName }),
+    });
+  },
 };
 
 export const projectsApi = {
@@ -277,6 +286,12 @@ export const projectsApi = {
     return api<Project>("/projects", {
       method: "POST",
       body: JSON.stringify(input),
+    });
+  },
+  async rename(id: number, name: string): Promise<Project> {
+    return api<Project>(`/projects/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
     });
   },
 };

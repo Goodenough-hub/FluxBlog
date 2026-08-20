@@ -25,6 +25,7 @@ import {
   FiRotateCcw,
   FiUploadCloud,
   FiArrowDownCircle,
+  FiLayers,
 } from "react-icons/fi";
 import { useAuth } from "../hooks/useAuth";
 import {
@@ -34,6 +35,7 @@ import {
   type Project,
 } from "../api/client";
 import { formatDraftDate } from "../lib/draft-date";
+import TaxonomyDrawer from "../components/TaxonomyDrawer";
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   draft: { label: "草稿", color: "default" },
@@ -81,6 +83,7 @@ export default function ListPage() {
     null
   );
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [taxonomyOpen, setTaxonomyOpen] = useState(false);
 
   // 筛选
   const [searchTitle, setSearchTitle] = useState("");
@@ -521,6 +524,9 @@ export default function ListPage() {
             草稿
           </h2>
           <div className="flex items-center gap-2">
+            <Button icon={<FiLayers />} onClick={() => setTaxonomyOpen(true)}>
+              分类管理
+            </Button>
             <Button onClick={doLogout}>退出</Button>
             <Button
               type="primary"
@@ -660,6 +666,27 @@ export default function ListPage() {
           />
         </div>
       </section>
+      <TaxonomyDrawer
+        open={taxonomyOpen}
+        onClose={() => setTaxonomyOpen(false)}
+        drafts={drafts}
+        projects={projects}
+        tags={allTags}
+        onProjectRenamed={(updated) =>
+          setProjects((current) =>
+            current.map((project) => (project.id === updated.id ? updated : project))
+          )
+        }
+        onTagRenamed={(oldName, newName) => {
+          setDrafts((current) =>
+            current.map((draft) => ({
+              ...draft,
+              tags: draft.tags?.map((tag) => (tag === oldName ? newName : tag)) ?? [],
+            }))
+          );
+          setFilterTag((current) => (current === oldName ? newName : current));
+        }}
+      />
     </div>
   );
 }
