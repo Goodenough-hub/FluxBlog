@@ -11,6 +11,8 @@ export interface PreparedImage {
   blob: Blob;
   mime: string;
   filename: string;
+  width: number;
+  height: number;
 }
 
 export function isAcceptedImage(file: File): boolean {
@@ -46,15 +48,21 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
   if (file.size > MAX_RAW) throw new Error("原文件超过 25MiB");
   if (!isAcceptedImage(file))
     throw new Error("仅接受 JPEG/PNG/WebP/GIF，拒绝 SVG");
-  if (file.type === "image/gif")
-    return { blob: file, mime: "image/gif", filename: file.name };
+  if (file.type === "image/gif") {
+    const { w, h } = await naturalSize(file);
+    return { blob: file, mime: "image/gif", filename: file.name, width: w, height: h };
+  }
 
   const bitmap = await createImageBitmap(file, {
     imageOrientation: "from-image",
   }).catch(() => null);
   let canvas: HTMLCanvasElement;
+  let w: number;
+  let h: number;
   if (bitmap) {
-    const { w, h } = fitToEdge(bitmap.width, bitmap.height);
+    const fitted = fitToEdge(bitmap.width, bitmap.height);
+    w = fitted.w;
+    h = fitted.h;
     canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
@@ -64,7 +72,9 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
     const url = URL.createObjectURL(file);
     try {
       const img = await loadImg(url);
-      const { w, h } = fitToEdge(img.naturalWidth, img.naturalHeight);
+      const fitted = fitToEdge(img.naturalWidth, img.naturalHeight);
+      w = fitted.w;
+      h = fitted.h;
       canvas = document.createElement("canvas");
       canvas.width = w;
       canvas.height = h;
@@ -76,7 +86,7 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
   const blob = await canvasToBlob(canvas, "image/webp", QUALITY);
   if (blob.size > 8 * 1024 * 1024)
     throw new Error("转换后超过 8MiB，请缩小或压缩");
-  return { blob, mime: "image/webp", filename: baseName(file.name) + ".webp" };
+  return { blob, mime: "image/webp", filename: baseName(file.name) + ".webp", width: w, height: h };
 }
 
 function loadImg(url: string): Promise<HTMLImageElement> {
@@ -86,6 +96,14 @@ function loadImg(url: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error("decode failed"));
     img.src = url;
   });
+}
+
+// 读取图片原始像素尺寸（GIF 等不转码的格式用）。
+function naturalSize(file: File): Promise<{ w: number; h: number }> {
+  const url = URL.createObjectURL(file);
+  return loadImg(url)
+    .then((img) => ({ w: img.naturalWidth, h: img.naturalHeight }))
+    .finally(() => URL.revokeObjectURL(url));
 }
 
 /** 上传图片到 /assets，带进度回调与一次重试。鉴权由 cookie 自动携带。 */

@@ -82,7 +82,11 @@ const VditorEditor = forwardRef<VditorEditorHandle, VditorEditorProps>(
               try {
                 const prepared = await prepareImage(f);
                 const url = await uploadImage(prepared, draftIdRef.current);
-                markdowns.push(`![${f.name.replace(/\.[^.]+$/, "")}](${url})`);
+                const alt = f.name.replace(/\.[^.]+$/, "");
+                // 插入 <img> 标签：带原始像素尺寸，max-width:100% 防止溢出文章容器。
+                markdowns.push(
+                  `<img src="${url}" alt="${alt}" width="${prepared.width}" height="${prepared.height}" style="max-width:100%;height:auto;" />`
+                );
               } catch (e) {
                 console.error("vditor upload failed", e);
                 return e instanceof Error ? e.message : "图片上传失败";
