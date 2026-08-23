@@ -39,7 +39,7 @@ const tocHeadings = extractHeadings(post.markdown);
 const locale = Astro.currentLocale ?? config.site.lang;
 const { title, description, cover, publishedAt, updatedAt, tags } = post;
 
-// 上一篇/下一篇：从公开列表里按当前位置取相邻项（列表已按更新时间倒序）。
+// 上一篇/下一篇：从公开列表里按当前位置取相邻项（列表已按首次发布时间倒序）。
 const all = await listPublicPosts();
 const idx = all.findIndex(p => p.slug === post.slug);
 const prevPost = idx > 0 ? { slug: all[idx - 1].slug, title: all[idx - 1].title } : null;

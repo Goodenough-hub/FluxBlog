@@ -150,8 +150,8 @@ export interface Draft {
   publishedAt?: string | null;
   hasUnpublishedChanges?: boolean;
   scheduledPublishAt?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Project {

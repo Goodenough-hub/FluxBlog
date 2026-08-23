@@ -13,11 +13,11 @@ export async function GET() {
     title: config.site.title,
     description: config.site.description,
     site: config.site.url,
-    items: posts.map(({ slug, title, description, publishedAt, updatedAt }) => ({
+    items: posts.map(({ slug, title, description, publishedAt }) => ({
       link: getPostUrlBySlug(slug, config.site.lang),
       title,
       description,
-      pubDate: new Date(updatedAt ?? publishedAt ?? Date.now()),
+      pubDate: new Date(publishedAt ?? Date.now()),
     })),
   });
 }

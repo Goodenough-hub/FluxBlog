@@ -408,6 +408,13 @@ export default function ListPage() {
         ),
       },
       {
+        title: "创建时间",
+        dataIndex: "createdAt",
+        key: "createdAt",
+        width: 140,
+        render: (value: string) => <DraftDate value={value} />,
+      },
+      {
         title: "发布时间",
         dataIndex: "publishedAt",
         key: "publishedAt",
@@ -415,11 +422,11 @@ export default function ListPage() {
         render: (value: string | null | undefined) => <DraftDate value={value} />,
       },
       {
-        title: "更新时间",
+        title: "修改时间",
         dataIndex: "updatedAt",
         key: "updatedAt",
         width: 140,
-        render: (value: string | null | undefined) => <DraftDate value={value} />,
+        render: (value: string) => <DraftDate value={value} />,
       },
       {
         title: "操作",
