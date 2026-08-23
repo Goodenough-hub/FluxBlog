@@ -259,7 +259,7 @@ const ogImage = ogImageUrl
       }
     });
 
-    function open(src, alt, trigger) {
+    function open(src, alt, trigger, referrerPolicy) {
       if (overlay) return;
       lastFocused = trigger ?? document.activeElement;
 
@@ -282,6 +282,7 @@ const ogImage = ogImageUrl
       closeButton.addEventListener("click", close);
 
       const image = document.createElement("img");
+      if (referrerPolicy) image.referrerPolicy = referrerPolicy;
       image.src = src;
       image.alt = "";
       image.className =
@@ -471,7 +472,12 @@ const ogImage = ogImageUrl
     }
 
     function activate(image) {
-      open(image.currentSrc || image.src, image.alt, image);
+      open(
+        image.currentSrc || image.src,
+        image.alt,
+        image,
+        image.referrerPolicy
+      );
     }
 
     article.addEventListener("click", e => {

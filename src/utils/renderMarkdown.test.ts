@@ -21,3 +21,42 @@ describe("renderMarkdown 源码位置", () => {
     expect(html).toContain('data-source-end="4"');
   });
 });
+
+describe("renderMarkdown CSDN 图片兼容", () => {
+  it("为 CSDN Markdown 图片禁用 Referer 并移除居中标记", async () => {
+    const html = await renderMarkdown(
+      "![示例](https://i-blog.csdnimg.cn/blog_migrate/image.jpeg?x=1#pic_center)"
+    );
+
+    expect(html).toContain(
+      'src="https://i-blog.csdnimg.cn/blog_migrate/image.jpeg?x=1"'
+    );
+    expect(html).toContain('referrerpolicy="no-referrer"');
+    expect(html).not.toContain("#pic_center");
+  });
+
+  it("兼容原始 HTML 图片且不改写非 CSDN 图片", async () => {
+    const html = await renderMarkdown(
+      '<img src="https://img-blog.csdnimg.cn/a.png#pic_center" alt="CSDN"><img src="https://example.com/a.png#pic_center" alt="other">'
+    );
+
+    expect(html).toContain(
+      '<img src="https://img-blog.csdnimg.cn/a.png" alt="CSDN" referrerpolicy="no-referrer">'
+    );
+    expect(html).toContain(
+      '<img src="https://example.com/a.png#pic_center" alt="other">'
+    );
+  });
+
+  it("不匹配伪装域名并保留其他 fragment", async () => {
+    const html = await renderMarkdown(
+      "![伪装](https://i-blog.csdnimg.cn.evil.example/a.png#pic_center)\n\n![片段](https://i-blog.csdnimg.cn/a.png#section)"
+    );
+
+    expect(html).toContain(
+      'src="https://i-blog.csdnimg.cn.evil.example/a.png#pic_center"'
+    );
+    expect(html).toContain('src="https://i-blog.csdnimg.cn/a.png#section"');
+    expect(html.match(/referrerpolicy="no-referrer"/g)).toHaveLength(1);
+  });
+});

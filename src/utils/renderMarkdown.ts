@@ -25,6 +25,7 @@ import rehypeKatex from "rehype-katex";
 import rehypeStringify from "rehype-stringify";
 import rehypeShiki from "@shikijs/rehype";
 import remarkMermaid from "./remark-mermaid";
+import rehypeCsdnImages from "./rehype-csdn-images";
 import rehypeSourcePosition from "./rehype-source-position";
 import { shikiThemes, shikiTransformers } from "./markdownPlugins";
 
@@ -37,6 +38,7 @@ const processor = unified()
   .use(remarkMath)
   .use(remarkRehype, { allowDangerousHtml: true })
   .use(rehypeRaw)
+  .use(rehypeCsdnImages)
   .use(rehypeSlug)
   .use(rehypeCallouts)
   .use(rehypeKatex)
