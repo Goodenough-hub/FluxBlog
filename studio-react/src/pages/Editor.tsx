@@ -351,6 +351,8 @@ export default function EditorPage() {
         const res = await draftsApi.publish(draft.id, {
           visibility: values.visibility,
           scheduledPublishAt: values.scheduledPublishAt,
+          publishedAt: values.publishedAt,
+          syncCreatedAt: values.syncCreatedAt,
           projectId: values.projectId,
           tags: values.tags,
         });

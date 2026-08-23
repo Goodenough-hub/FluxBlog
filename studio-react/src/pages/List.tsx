@@ -36,6 +36,7 @@ import {
 } from "../api/client";
 import { formatDraftDate } from "../lib/draft-date";
 import TaxonomyDrawer from "../components/TaxonomyDrawer";
+import PublishedAtModal from "../components/PublishedAtModal";
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   draft: { label: "草稿", color: "default" },
@@ -50,7 +51,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function ListPage() {
-  const { ready, loggedIn, isAdmin, doLogout } = useAuth();
+  const { ready, loggedIn, me, isAdmin, doLogout } = useAuth();
   const navigate = useNavigate();
   const { message, modal, notification } = AntdApp.useApp();
 
@@ -84,6 +85,8 @@ export default function ListPage() {
   );
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [taxonomyOpen, setTaxonomyOpen] = useState(false);
+  const [publishedAtDraft, setPublishedAtDraft] = useState<Draft | null>(null);
+  const [publishedAtLoading, setPublishedAtLoading] = useState(false);
 
   // 筛选
   const [searchTitle, setSearchTitle] = useState("");
@@ -246,6 +249,33 @@ export default function ListPage() {
       message.error(e.message);
     } finally {
       setVisibilityLoadingId(null);
+    }
+  };
+
+  const updatePublishedAt = async (
+    publishedAt: string,
+    syncCreatedAt: boolean
+  ) => {
+    if (!publishedAtDraft) return;
+    const targetDraft = publishedAtDraft;
+    setPublishedAtLoading(true);
+    try {
+      const updated = await draftsApi.updatePublishedAt(
+        targetDraft.id,
+        publishedAt,
+        syncCreatedAt
+      );
+      setDrafts((current) =>
+        current.map((draft) => (draft.id === updated.id ? updated : draft))
+      );
+      setPublishedAtDraft((current) =>
+        current?.id === targetDraft.id ? null : current
+      );
+      message.success("首次发布时间已更新");
+    } catch (e: any) {
+      message.error(e.message);
+    } finally {
+      setPublishedAtLoading(false);
     }
   };
 
@@ -419,7 +449,26 @@ export default function ListPage() {
         dataIndex: "publishedAt",
         key: "publishedAt",
         width: 140,
-        render: (value: string | null | undefined) => <DraftDate value={value} />,
+        render: (value: string | null | undefined, r) => (
+          <div className="flex items-center gap-1.5">
+            <DraftDate value={value} />
+            {value && String(r.userId) === me?.userId && (
+              <Tooltip title="修改首次发布时间">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setPublishedAtDraft(r);
+                  }}
+                  className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-white/5 dark:hover:text-indigo-400"
+                  aria-label={`修改 ${r.title} 的首次发布时间`}
+                >
+                  <FiEdit2 size={12} />
+                </button>
+              </Tooltip>
+            )}
+          </div>
+        ),
       },
       {
         title: "修改时间",
@@ -693,6 +742,13 @@ export default function ListPage() {
           );
           setFilterTag((current) => (current === oldName ? newName : current));
         }}
+      />
+      <PublishedAtModal
+        open={publishedAtDraft != null}
+        value={publishedAtDraft?.publishedAt}
+        loading={publishedAtLoading}
+        onClose={() => setPublishedAtDraft(null)}
+        onConfirm={updatePublishedAt}
       />
     </div>
   );

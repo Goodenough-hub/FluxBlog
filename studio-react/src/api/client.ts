@@ -136,6 +136,7 @@ export async function fetchMe(): Promise<MeResponse> {
 
 export interface Draft {
   id: number;
+  userId: number;
   slug: string;
   title: string;
   description: string;
@@ -235,6 +236,8 @@ export const draftsApi = {
     options?: {
       visibility?: "public" | "private";
       scheduledPublishAt?: string | null;
+      publishedAt?: string | null;
+      syncCreatedAt?: boolean;
       projectId?: number | null;
       tags?: string[];
     }
@@ -251,6 +254,16 @@ export const draftsApi = {
     return api(`/drafts/${id}/publish`, {
       method: "POST",
       body: JSON.stringify(options ?? {}),
+    });
+  },
+  async updatePublishedAt(
+    id: number,
+    publishedAt: string,
+    syncCreatedAt: boolean
+  ): Promise<Draft> {
+    return api<Draft>(`/drafts/${id}/published-at`, {
+      method: "PATCH",
+      body: JSON.stringify({ publishedAt, syncCreatedAt }),
     });
   },
   async unpublish(id: number): Promise<{ status: string; noop?: boolean }> {

@@ -8,18 +8,30 @@ import {
   DatePicker,
   Input,
   Button,
+  Checkbox,
   Divider,
   App as AntdApp,
 } from "antd";
 import { FiPlus, FiTag, FiLayers, FiShield, FiClock, FiLink } from "react-icons/fi";
 import dayjs, { type Dayjs } from "dayjs";
 import { type Draft, type Project, projectsApi } from "../api/client";
+import {
+  serializeHistoricalPublishedAt,
+  togglePublishTiming,
+} from "../lib/published-at";
 
 export interface PublishFormValue {
   projectId: number | null;
   tags: string[];
   visibility: "public" | "private";
   scheduledPublishAt: string | null; // ISO 8601 or null = immediate
+  publishedAt: string | null;
+  syncCreatedAt: boolean;
+}
+
+interface PublishFormFields extends Omit<PublishFormValue, "scheduledPublishAt" | "publishedAt"> {
+  scheduledPublishAt: Dayjs | null;
+  publishedAt: Dayjs | null;
 }
 
 interface PublishModalProps {
@@ -45,9 +57,10 @@ export default function PublishModal({
   loading,
   onProjectCreated,
 }: PublishModalProps) {
-  const [form] = Form.useForm<PublishFormValue>();
+  const [form] = Form.useForm<PublishFormFields>();
   const { message } = AntdApp.useApp();
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [historicalEnabled, setHistoricalEnabled] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [creatingProject, setCreatingProject] = useState(false);
 
@@ -58,8 +71,11 @@ export default function PublishModal({
         tags: draft.tags ?? [],
         visibility: draft.visibility,
         scheduledPublishAt: null,
+        publishedAt: null,
+        syncCreatedAt: false,
       });
       setScheduleEnabled(false);
+      setHistoricalEnabled(false);
       setNewProjectName("");
       setNewTagName("");
     }
@@ -68,6 +84,18 @@ export default function PublishModal({
   const scheduledTime = Form.useWatch("scheduledPublishAt", form) as unknown as
     | Dayjs
     | undefined;
+  const historicalTime = Form.useWatch("publishedAt", form);
+
+  const changeTimingMode = (mode: "scheduled" | "historical", enabled: boolean) => {
+    const next = togglePublishTiming(mode, enabled);
+    setScheduleEnabled(next.scheduleEnabled);
+    setHistoricalEnabled(next.historicalEnabled);
+    form.setFieldsValue({
+      scheduledPublishAt: next.scheduledPublishAt,
+      publishedAt: next.publishedAt,
+      syncCreatedAt: next.syncCreatedAt,
+    });
+  };
 
   const submit = async () => {
     try {
@@ -79,6 +107,13 @@ export default function PublishModal({
         message.error("定时发布时间需至少在 1 分钟之后");
         return;
       }
+      const publishedAt = historicalEnabled
+        ? serializeHistoricalPublishedAt(historicalTime)
+        : null;
+      if (historicalEnabled && !publishedAt) {
+        message.error("历史发布时间只能选择现在或过去");
+        return;
+      }
       await onConfirm({
         projectId: v.projectId ?? null,
         tags: v.tags ?? [],
@@ -87,6 +122,8 @@ export default function PublishModal({
           scheduleEnabled && scheduledTime
             ? scheduledTime.toISOString()
             : null,
+        publishedAt,
+        syncCreatedAt: historicalEnabled && Boolean(v.syncCreatedAt),
       });
     } catch {
       // validateFields 已展示错误
@@ -151,7 +188,7 @@ export default function PublishModal({
       ]}
       destroyOnClose
     >
-      <Form<PublishFormValue> form={form} layout="vertical">
+      <Form<PublishFormFields> form={form} layout="vertical">
         <Form.Item label={<Label icon={<FiLink size={13} />} text="访问地址" />}>
           <Input
             value={`/blog/posts/${draft.slug || "（未生成）"}`}
@@ -258,7 +295,7 @@ export default function PublishModal({
           </span>
           <Switch
             checked={scheduleEnabled}
-            onChange={setScheduleEnabled}
+            onChange={(enabled) => changeTimingMode("scheduled", enabled)}
             checkedChildren="开"
             unCheckedChildren="关"
           />
@@ -286,6 +323,48 @@ export default function PublishModal({
               placeholder="选择发布时间"
             />
           </Form.Item>
+        )}
+
+        {!draft.publishedAt && (
+          <>
+            <Divider style={{ margin: "12px 0" }} />
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                <FiClock size={13} />
+                <span>历史发布时间（用于迁移）</span>
+              </span>
+              <Switch
+                checked={historicalEnabled}
+                onChange={(enabled) => changeTimingMode("historical", enabled)}
+                checkedChildren="开"
+                unCheckedChildren="关"
+              />
+            </div>
+            <div className="mt-1 text-[11px] text-slate-400">
+              仅用于迁移历史文章；开启后立即发布，并使用所选时间作为首次发布时间。
+            </div>
+            {historicalEnabled && (
+              <>
+                <Form.Item
+                  className="mt-2"
+                  label="历史发布时间"
+                  name="publishedAt"
+                  rules={[{ required: true, message: "请选择历史发布时间" }]}
+                >
+                  <DatePicker
+                    showTime
+                    format="YYYY-MM-DD HH:mm"
+                    style={{ width: "100%" }}
+                    disabledDate={(date) => date.isAfter(dayjs(), "day")}
+                    placeholder="选择现在或过去的时间"
+                  />
+                </Form.Item>
+                <Form.Item name="syncCreatedAt" valuePropName="checked">
+                  <Checkbox>同时将草稿创建时间设为该历史时间</Checkbox>
+                </Form.Item>
+              </>
+            )}
+          </>
         )}
       </Form>
     </Modal>
