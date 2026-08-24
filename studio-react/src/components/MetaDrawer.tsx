@@ -1,7 +1,8 @@
-import { useEffect } from "react";
-import { Drawer, Form, Input, Select, Switch, App as AntdApp } from "antd";
+import { useEffect, useMemo, useRef } from "react";
+import { Drawer, Form, Input, Select } from "antd";
 import { FiType, FiAlignLeft, FiTag, FiLink, FiImage, FiShield, FiLayers } from "react-icons/fi";
 import type { Draft, Project } from "../api/client";
+import { buildTagOptions } from "../lib/taxonomy";
 
 const { TextArea } = Input;
 
@@ -20,33 +21,49 @@ interface MetaDrawerProps {
   onClose: () => void;
   draft: Draft;
   projects: Project[];
+  allTags: string[];
+  value: MetaFormValue;
   onChange: (v: MetaFormValue) => void;
 }
 
 // 右侧元数据抽屉：标题/slug/标签/摘要/封面/可见性/项目归属。
 // FluxBlog 不支持分类树，标签是自由文本数组，项目是扁平 Select。
+// 表单以 value（当前编辑值）为准，而非 draft（上次保存的服务端值）——
+// 否则未保存的编辑会在重新打开抽屉时被旧值覆盖。
 export default function MetaDrawer({
   open,
   onClose,
   draft,
   projects,
+  allTags,
+  value,
   onChange,
 }: MetaDrawerProps) {
   const [form] = Form.useForm<MetaFormValue>();
-  const { message } = AntdApp.useApp();
+
+  // value 每次输入都会变，用 ref 读取最新值，避免把它放进依赖导致
+  // 每次编辑都 setFieldsValue（会打断输入）。仅在抽屉 open 时用当前值回填。
+  const valueRef = useRef(value);
+  valueRef.current = value;
 
   useEffect(() => {
     if (open) {
+      const v = valueRef.current;
       form.setFieldsValue({
-        title: draft.title || "",
-        tags: draft.tags || [],
-        description: draft.description || "",
-        cover: draft.cover || "",
-        visibility: draft.visibility,
-        projectId: draft.projectId ?? null,
+        title: v.title || "",
+        tags: v.tags || [],
+        description: v.description || "",
+        cover: v.cover || "",
+        visibility: v.visibility,
+        projectId: v.projectId ?? null,
       });
     }
-  }, [open, draft, form]);
+  }, [open, form]);
+
+  const tagOptions = useMemo(
+    () => buildTagOptions(allTags, value.tags ?? []),
+    [allTags, value.tags]
+  );
 
   return (
     <Drawer
@@ -95,8 +112,9 @@ export default function MetaDrawer({
         >
           <Select
             mode="tags"
-            placeholder="输入后回车，逗号风格"
+            placeholder="选择已有或输入新标签"
             tokenSeparators={[",", "，"]}
+            options={tagOptions}
             className="w-full"
           />
         </Form.Item>

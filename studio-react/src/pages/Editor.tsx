@@ -670,6 +670,8 @@ export default function EditorPage() {
         onClose={() => setMetaDrawerOpen(false)}
         draft={draft}
         projects={projects}
+        allTags={allTags}
+        value={meta}
         onChange={(m) =>
           // MetaDrawer 的表单不含 slug（slug 由标题自动生成、创建后不可修改），
           // 这里合并而非替换，避免丢失 meta.slug 导致后续 PATCH 少发 slug 字段。

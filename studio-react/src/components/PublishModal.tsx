@@ -15,6 +15,7 @@ import {
 import { FiPlus, FiTag, FiLayers, FiShield, FiClock, FiLink } from "react-icons/fi";
 import dayjs, { type Dayjs } from "dayjs";
 import { type Draft, type Project, projectsApi } from "../api/client";
+import { buildTagOptions } from "../lib/taxonomy";
 import {
   serializeHistoricalPublishedAt,
   togglePublishTiming,
@@ -151,7 +152,7 @@ export default function PublishModal({
   };
 
   const tagOptions = useMemo(
-    () => Array.from(new Set([...allTags, ...(draft.tags ?? [])])).map((t) => ({ value: t, label: t })),
+    () => buildTagOptions(allTags, draft.tags ?? []),
     [allTags, draft.tags]
   );
 
