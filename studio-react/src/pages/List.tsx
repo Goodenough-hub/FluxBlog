@@ -35,6 +35,7 @@ import {
   type Project,
 } from "../api/client";
 import { formatDraftDate } from "../lib/draft-date";
+import { ProjectCell } from "../lib/project-cell";
 import TaxonomyDrawer from "../components/TaxonomyDrawer";
 import PublishedAtModal from "../components/PublishedAtModal";
 
@@ -331,21 +332,9 @@ export default function ListPage() {
         dataIndex: "projectId",
         key: "project",
         width: 120,
-        render: (projectId: number | null | undefined) => {
-          if (projectId == null) {
-            return <span className="text-xs text-slate-400 dark:text-slate-500">—</span>;
-          }
-          const name = projectMap.get(projectId);
-          return name ? (
-            <Tag color="blue" className="m-0">
-              {name}
-            </Tag>
-          ) : (
-            <Tooltip title={`项目 ID ${projectId} 已删除`}>
-              <span className="text-xs text-amber-500">已删除</span>
-            </Tooltip>
-          );
-        },
+        render: (projectId: number | null | undefined) => (
+          <ProjectCell projectId={projectId} projectMap={projectMap} />
+        ),
       },
       {
         title: "标签",
