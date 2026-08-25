@@ -80,7 +80,8 @@
     }
 
     blockquote {
-      @apply border-s-accent/80 wrap-break-word opacity-80;
+      /* 插件默认给块引用 italic，覆盖为正体（仅去斜体，保留左侧竖线等其余样式） */
+      @apply not-italic border-s-accent/80 wrap-break-word opacity-80;
     }
 
     details:not(.callout) {
