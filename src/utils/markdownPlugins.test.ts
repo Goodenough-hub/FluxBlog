@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shikiThemes, shikiTransformers } from "./markdownPlugins";
+import { shikiThemes, shikiTransformers, shikiDefaultLanguage } from "./markdownPlugins";
 
 describe("markdownPlugins 共享 Shiki 配置", () => {
   it("主题为 Xcode 双主题，键名保持 light/dark", () => {
@@ -12,5 +12,9 @@ describe("markdownPlugins 共享 Shiki 配置", () => {
     expect(names).toContain("code-window");
     // notation 系列仍在（diff/highlight/word-highlight）
     expect(names.some(n => n && n.includes("notation"))).toBe(true);
+  });
+
+  it("默认语言为 text，让无语言围栏与 ```text 渲染一致", () => {
+    expect(shikiDefaultLanguage).toBe("text");
   });
 });

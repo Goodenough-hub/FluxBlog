@@ -20,6 +20,11 @@ export const shikiThemes = {
   dark: xcodeDark,
 } as const;
 
+// 无语言标记的 ``` 代码块默认按 text 处理：@shikijs/rehype 在未指定语言时
+// 会跳过高亮、直接输出裸 <pre><code>，导致与 ```text 的 xcode 窗口外观不一致。
+// 统一为 text 后，裸围栏与 ```text 渲染完全相同（窗口/行号/复制按钮，无语言标签）。
+export const shikiDefaultLanguage = "text";
+
 export const shikiTransformers = [
   transformerCodeWindow(),
   transformerNotationHighlight(),

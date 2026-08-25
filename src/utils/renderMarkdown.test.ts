@@ -22,6 +22,31 @@ describe("renderMarkdown 源码位置", () => {
   });
 });
 
+describe("renderMarkdown 无语言代码块默认按 text 渲染", () => {
+  it("裸 ``` 与 ```text 输出完全一致", async () => {
+    const bare = await renderMarkdown("```\nAudi\nBMW\n```");
+    const text = await renderMarkdown("```text\nAudi\nBMW\n```");
+
+    expect(bare).toBe(text);
+  });
+
+  it("裸 ``` 也包裹进 xcode 窗口并带行号，无语言标签", async () => {
+    const html = await renderMarkdown("```\nAudi\nBMW\n```");
+
+    expect(html).toContain('class="xcode-window"');
+    expect(html).toContain("line-numbers");
+    // text/plaintext 语言不显示语言标签
+    expect(html).not.toContain("xcode-lang");
+  });
+
+  it("显式语言仍高亮并显示语言标签", async () => {
+    const html = await renderMarkdown("```javascript\nconst a = 1;\n```");
+
+    expect(html).toContain('class="xcode-window"');
+    expect(html).toContain('class="xcode-lang">javascript<');
+  });
+});
+
 describe("renderMarkdown CSDN 图片兼容", () => {
   it("为 CSDN Markdown 图片禁用 Referer 并移除居中标记", async () => {
     const html = await renderMarkdown(

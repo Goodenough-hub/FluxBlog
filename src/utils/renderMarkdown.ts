@@ -27,7 +27,7 @@ import rehypeShiki from "@shikijs/rehype";
 import remarkMermaid from "./remark-mermaid";
 import rehypeCsdnImages from "./rehype-csdn-images";
 import rehypeSourcePosition from "./rehype-source-position";
-import { shikiThemes, shikiTransformers } from "./markdownPlugins";
+import { shikiThemes, shikiTransformers, shikiDefaultLanguage } from "./markdownPlugins";
 
 const processor = unified()
   .use(remarkParse)
@@ -46,6 +46,7 @@ const processor = unified()
     themes: shikiThemes,
     transformers: shikiTransformers,
     defaultColor: false,
+    defaultLanguage: shikiDefaultLanguage,
   })
   .use(rehypeSourcePosition)
   .use(rehypeStringify);
