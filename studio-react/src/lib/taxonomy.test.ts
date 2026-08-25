@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildTagOptions, validateRename } from "./taxonomy";
+import {
+  appendTag,
+  buildTagOptions,
+  canCreateTag,
+  validateRename,
+} from "./taxonomy";
 
 describe("validateRename", () => {
   it("清理名称两端空格并允许使用新名称", () => {
@@ -41,5 +46,36 @@ describe("buildTagOptions", () => {
     expect(buildTagOptions([], ["未保存标签"])).toEqual([
       { value: "未保存标签", label: "未保存标签" },
     ]);
+  });
+});
+
+describe("canCreateTag", () => {
+  const options = [
+    { value: "前端", label: "前端" },
+    { value: "后端", label: "后端" },
+  ];
+
+  it("非空且不在候选项里时可新建", () => {
+    expect(canCreateTag("运维", options)).toBe(true);
+    expect(canCreateTag("  运维  ", options)).toBe(true);
+  });
+
+  it("空白或已存在时不可新建", () => {
+    expect(canCreateTag("", options)).toBe(false);
+    expect(canCreateTag("   ", options)).toBe(false);
+    expect(canCreateTag("前端", options)).toBe(false);
+    expect(canCreateTag("  后端  ", options)).toBe(false);
+  });
+});
+
+describe("appendTag", () => {
+  it("追加新标签并清理空格", () => {
+    expect(appendTag(["前端"], "  后端  ")).toEqual(["前端", "后端"]);
+  });
+
+  it("空名称或重复标签时原样返回", () => {
+    const current = ["前端"];
+    expect(appendTag(current, "   ")).toBe(current);
+    expect(appendTag(current, "前端")).toBe(current);
   });
 });

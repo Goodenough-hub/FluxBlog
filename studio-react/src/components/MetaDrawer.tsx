@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef } from "react";
-import { Drawer, Form, Input, Select } from "antd";
-import { FiType, FiAlignLeft, FiTag, FiLink, FiImage, FiShield, FiLayers } from "react-icons/fi";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Drawer, Form, Input, Select, Button, Divider } from "antd";
+import { FiType, FiAlignLeft, FiTag, FiLink, FiImage, FiShield, FiLayers, FiPlus } from "react-icons/fi";
 import type { Draft, Project } from "../api/client";
-import { buildTagOptions } from "../lib/taxonomy";
+import { appendTag, buildTagOptions, canCreateTag } from "../lib/taxonomy";
 
 const { TextArea } = Input;
 
@@ -65,6 +65,19 @@ export default function MetaDrawer({
     [allTags, value.tags]
   );
 
+  const [newTagName, setNewTagName] = useState("");
+
+  // 手动新建标签：追加进表单已选列表。form.setFieldValue 不触发 onValuesChange，
+  // 需手动回传 onChange，保证 Editor 的 meta 同步更新。
+  const handleCreateTag = () => {
+    if (!canCreateTag(newTagName, tagOptions)) return;
+    const current = (form.getFieldValue("tags") as string[] | undefined) ?? [];
+    const next = appendTag(current, newTagName);
+    form.setFieldValue("tags", next);
+    onChange(form.getFieldsValue());
+    setNewTagName("");
+  };
+
   return (
     <Drawer
       title="文章信息"
@@ -116,6 +129,32 @@ export default function MetaDrawer({
             tokenSeparators={[",", "，"]}
             options={tagOptions}
             className="w-full"
+            dropdownRender={(menu) => (
+              <>
+                {menu}
+                <Divider style={{ margin: "8px 0" }} />
+                <div className="flex items-center gap-2 px-1 pb-1">
+                  <Input
+                    placeholder="新建标签名称"
+                    value={newTagName}
+                    onChange={(e) => setNewTagName(e.target.value)}
+                    onPressEnter={(e) => {
+                      e.preventDefault();
+                      handleCreateTag();
+                    }}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="text"
+                    icon={<FiPlus size={14} />}
+                    onClick={handleCreateTag}
+                    disabled={!canCreateTag(newTagName, tagOptions)}
+                  >
+                    新建
+                  </Button>
+                </div>
+              </>
+            )}
           />
         </Form.Item>
 

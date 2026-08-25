@@ -15,7 +15,7 @@ import {
 import { FiPlus, FiTag, FiLayers, FiShield, FiClock, FiLink } from "react-icons/fi";
 import dayjs, { type Dayjs } from "dayjs";
 import { type Draft, type Project, projectsApi } from "../api/client";
-import { buildTagOptions } from "../lib/taxonomy";
+import { appendTag, buildTagOptions, canCreateTag } from "../lib/taxonomy";
 import {
   serializeHistoricalPublishedAt,
   togglePublishTiming,
@@ -157,17 +157,12 @@ export default function PublishModal({
   );
 
   const [newTagName, setNewTagName] = useState("");
-  const trimmedNewTag = newTagName.trim();
-  const canCreateTag =
-    trimmedNewTag.length > 0 &&
-    !tagOptions.some((o) => o.value === trimmedNewTag);
+  const canCreate = canCreateTag(newTagName, tagOptions);
 
   const handleCreateTag = () => {
-    if (!canCreateTag) return;
+    if (!canCreate) return;
     const current = (form.getFieldValue("tags") as string[] | undefined) ?? [];
-    if (!current.includes(trimmedNewTag)) {
-      form.setFieldValue("tags", [...current, trimmedNewTag]);
-    }
+    form.setFieldValue("tags", appendTag(current, newTagName));
     setNewTagName("");
   };
 
@@ -264,7 +259,7 @@ export default function PublishModal({
                     type="text"
                     icon={<FiPlus size={14} />}
                     onClick={handleCreateTag}
-                    disabled={!canCreateTag}
+                    disabled={!canCreate}
                   >
                     新建
                   </Button>
