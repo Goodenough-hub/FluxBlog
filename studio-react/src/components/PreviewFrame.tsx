@@ -48,6 +48,17 @@ const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(
       createPreviewFrameState
     );
     const previousRequestRef = useRef({ draftId, reloadKey });
+    // 待激活 iframe 的 RAF：定位后延一帧再切显示，避免过期请求或卸载时误激活。
+    const activateFrameRef = useRef<number | null>(null);
+
+    useEffect(
+      () => () => {
+        if (activateFrameRef.current !== null) {
+          cancelAnimationFrame(activateFrameRef.current);
+        }
+      },
+      []
+    );
 
     const getScrollElement = (slot: FrameSlot) => {
       const doc = iframeRefs.current[slot]?.contentDocument;
@@ -109,9 +120,16 @@ const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(
               onLoad={() => {
                 const scrollElement = getScrollElement(slot);
                 if (slot === frames.pendingSlot) {
-                  // Position the hidden document before making it visible.
+                  // 隐藏文档先定位到目标位置，再延一帧提交显示——保证切换瞬间
+                  // 新 iframe 已停在当前位置，而不是先露出文章顶部再滚过去。
                   onReady?.(scrollElement);
-                  dispatch({ type: "activate", slot });
+                  if (activateFrameRef.current !== null) {
+                    cancelAnimationFrame(activateFrameRef.current);
+                  }
+                  activateFrameRef.current = requestAnimationFrame(() => {
+                    activateFrameRef.current = null;
+                    dispatch({ type: "activate", slot });
+                  });
                 } else if (active) {
                   onReady?.(scrollElement);
                 }

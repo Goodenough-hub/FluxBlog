@@ -8,6 +8,17 @@ export interface SourcePosition {
   edge?: "start" | "end";
 }
 
+// 瞬时设置滚动位置：预览页 <html> 带全局 scroll-smooth，直接写 scrollTop 会触发
+// 平滑滚动动画——程序化定位（预览重载后恢复位置、双栏同步）必须瞬时完成，否则
+// 新 iframe 显示瞬间仍停在文章顶部，随后才滑到目标位置，产生"先到头再跳回"的观感。
+// 临时把 scroll-behavior 置为 auto，写完再还原，不影响目录点击等交互的平滑滚动。
+export function setScrollTopInstantly(root: HTMLElement, top: number): void {
+  const previous = root.style.scrollBehavior;
+  root.style.scrollBehavior = "auto";
+  root.scrollTop = top;
+  root.style.scrollBehavior = previous;
+}
+
 export function countSourceLines(markdown: string): number {
   return Math.max(1, markdown.split("\n").length);
 }

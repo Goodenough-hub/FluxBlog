@@ -4,6 +4,7 @@ import {
   normalizeAnchors,
   readSourcePosition,
   scrollTopForSourcePosition,
+  setScrollTopInstantly,
   sourceLineAtOffset,
   type ScrollAnchor,
   type SourcePosition,
@@ -147,7 +148,7 @@ export function useScrollSync(
         top,
         expiresAt: performance.now() + 160,
       };
-      root.scrollTop = top;
+      setScrollTopInstantly(root, top);
     },
     [getAnchors]
   );
