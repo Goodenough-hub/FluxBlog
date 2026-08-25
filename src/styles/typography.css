@@ -70,12 +70,17 @@
       }
     }
 
-    code {
-      @apply bg-muted/75 text-foreground rounded p-1 wrap-break-word before:content-none after:content-none;
+    /* 行内代码（单反引号）：飞书文档风格的紧凑文字块——淡灰底 + 细边框，
+       横向留白大于纵向，字号略小、字重中等；换行时每行都保留背景与圆角。
+       :not(pre) > code 精确限定行内代码，避免污染 ```代码块 的 Xcode 窗口。 */
+    :not(pre) > code {
+      @apply border-border bg-muted/70 text-foreground rounded-md border px-1.5 py-0.5 text-[0.875em] font-medium wrap-break-word before:content-none after:content-none;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
     }
 
     .astro-code code {
-      @apply bg-inherit p-0;
+      @apply border-0 bg-inherit p-0 text-inherit;
     }
 
     blockquote {
