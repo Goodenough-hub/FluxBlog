@@ -63,9 +63,8 @@ const { title, description, publishedAt, updatedAt, tags } = post;
 
   <BackButton />
 
-  <TableOfContents headings={tocHeadings} />
-
-  <div class="app-layout flex gap-8">
+  <div class="app-layout flex gap-8 xl:max-w-6xl">
+    <TableOfContents headings={tocHeadings} />
     <main
       id="main-content"
       class:list={["min-w-0 flex-1", { "mt-8": !config.features.showBackButton }]}
