@@ -8,6 +8,7 @@ import Card from "@/components/Card.astro";
 import Footer from "@/components/Footer.astro";
 import Pagination from "@/components/Pagination.astro";
 import { listPublicPosts } from "@/utils/blogApi";
+import { joinPath } from "@/utils/withBase";
 import { slugifyStr } from "@/utils/slugify";
 import { useTranslations } from "@/i18n";
 import config from "@/config";
@@ -39,7 +40,7 @@ if (hasPageParam && (currentPage < 2 || currentPage > lastPage)) {
 const slice = tagPosts.slice((currentPage - 1) * perPage, currentPage * perPage);
 
 const tagsBase = getRelativeLocaleUrl(locale, `tags/${tag}`);
-const pageUrl = (n: number) => `${tagsBase}/${n}`;
+const pageUrl = (n: number) => joinPath(tagsBase, n);
 const prevUrl = currentPage > 1 ? pageUrl(currentPage - 1) : undefined;
 const nextUrl = currentPage < lastPage ? pageUrl(currentPage + 1) : undefined;
 ---

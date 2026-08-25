@@ -44,3 +44,21 @@ export function getAssetPath(path: string): string {
   }
   return baseRoot + normalizedPath;
 }
+
+/**
+ * Join a resolved base path with extra segments, collapsing duplicate slashes
+ * at the seams. Prevents URLs like `/blog/posts//page/2` when `base` already
+ * ends with a trailing slash (getRelativeLocaleUrl may append one, which would
+ * otherwise break the SSR route match and 404 the paginated list pages).
+ */
+export function joinPath(
+  base: string,
+  ...segments: Array<string | number>
+): string {
+  const trimmedBase = base.replace(/\/+$/, "");
+  const tail = segments
+    .map(segment => String(segment).replace(/^\/+|\/+$/g, ""))
+    .filter(Boolean)
+    .join("/");
+  return tail ? `${trimmedBase}/${tail}` : trimmedBase;
+}

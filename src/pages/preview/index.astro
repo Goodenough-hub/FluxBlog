@@ -8,6 +8,7 @@ import Card from "@/components/Card.astro";
 import Footer from "@/components/Footer.astro";
 import Pagination from "@/components/Pagination.astro";
 import { listAllPostsForAdmin } from "@/utils/blogApi";
+import { joinPath } from "@/utils/withBase";
 import { useTranslations } from "@/i18n";
 import config from "@/config";
 
@@ -37,7 +38,7 @@ const lastPage = Math.max(1, Math.ceil(all.length / perPage));
 const slice = all.slice(0, perPage);
 
 const previewBase = getRelativeLocaleUrl(locale, "preview");
-const pageUrl = (n: number) => `${previewBase}/page/${n}`;
+const pageUrl = (n: number) => joinPath(previewBase, "page", n);
 const nextUrl = lastPage > 1 ? pageUrl(2) : undefined;
 ---
 
