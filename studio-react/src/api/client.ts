@@ -276,6 +276,12 @@ export const tagsApi = {
     const r = await api<{ tags: string[] | null }>("/tags");
     return r.tags ?? [];
   },
+  async create(name: string): Promise<{ name: string }> {
+    return api("/tags", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  },
   async rename(
     oldName: string,
     newName: string
@@ -283,6 +289,13 @@ export const tagsApi = {
     return api("/tags", {
       method: "PATCH",
       body: JSON.stringify({ oldName, newName }),
+    });
+  },
+  async delete(
+    name: string
+  ): Promise<{ name: string; updatedDrafts: number }> {
+    return api(`/tags?name=${encodeURIComponent(name)}`, {
+      method: "DELETE",
     });
   },
 };
@@ -306,6 +319,9 @@ export const projectsApi = {
       method: "PATCH",
       body: JSON.stringify({ name }),
     });
+  },
+  async delete(id: number): Promise<void> {
+    await api<void>(`/projects/${id}`, { method: "DELETE" });
   },
 };
 

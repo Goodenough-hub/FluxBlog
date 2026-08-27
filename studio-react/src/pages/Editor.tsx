@@ -677,6 +677,7 @@ export default function EditorPage() {
           // 这里合并而非替换，避免丢失 meta.slug 导致后续 PATCH 少发 slug 字段。
           setMeta((prev) => (prev ? { ...prev, ...m } : m))
         }
+        onProjectCreated={(p) => setProjects((prev) => [...prev, p])}
       />
       <HistoryDrawer
         open={historyDrawerOpen}

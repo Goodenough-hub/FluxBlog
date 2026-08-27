@@ -31,6 +31,7 @@ import { useAuth } from "../hooks/useAuth";
 import {
   draftsApi,
   projectsApi,
+  tagsApi,
   type Draft,
   type Project,
 } from "../api/client";
@@ -78,6 +79,7 @@ export default function ListPage() {
 
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [allTags, setAllTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [batchDeleteLoading, setBatchDeleteLoading] = useState(false);
   const [publishLoadingId, setPublishLoadingId] = useState<number | null>(null);
@@ -100,12 +102,14 @@ export default function ListPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [list, pros] = await Promise.all([
+      const [list, pros, tags] = await Promise.all([
         draftsApi.list(),
         projectsApi.list(),
+        tagsApi.list(),
       ]);
       setDrafts(list);
       setProjects(pros);
+      setAllTags(tags);
     } catch (e: any) {
       notification.error({ message: "加载失败", description: e.message });
     } finally {
@@ -116,13 +120,6 @@ export default function ListPage() {
   useEffect(() => {
     if (loggedIn) void load();
   }, [loggedIn, load]);
-
-  // 收集所有 tag 用于筛选下拉
-  const allTags = useMemo(() => {
-    const set = new Set<string>();
-    drafts.forEach((d) => d.tags?.forEach((t) => set.add(t)));
-    return Array.from(set).sort();
-  }, [drafts]);
 
   const filtered = useMemo(() => {
     return drafts.filter((d) => {
@@ -722,6 +719,21 @@ export default function ListPage() {
             current.map((project) => (project.id === updated.id ? updated : project))
           )
         }
+        onProjectCreated={(p) => setProjects((current) => [...current, p])}
+        onProjectDeleted={(id) => {
+          setProjects((current) => current.filter((p) => p.id !== id));
+          setDrafts((current) =>
+            current.map((draft) =>
+              draft.projectId === id ? { ...draft, projectId: null } : draft
+            )
+          );
+          setFilterProject((current) => (current === id ? null : current));
+        }}
+        onTagCreated={(name) =>
+          setAllTags((current) =>
+            current.includes(name) ? current : [...current, name].sort()
+          )
+        }
         onTagRenamed={(oldName, newName) => {
           setDrafts((current) =>
             current.map((draft) => ({
@@ -729,7 +741,23 @@ export default function ListPage() {
               tags: draft.tags?.map((tag) => (tag === oldName ? newName : tag)) ?? [],
             }))
           );
+          setAllTags((current) =>
+            current
+              .map((tag) => (tag === oldName ? newName : tag))
+              .filter((tag, i, arr) => arr.indexOf(tag) === i)
+              .sort()
+          );
           setFilterTag((current) => (current === oldName ? newName : current));
+        }}
+        onTagDeleted={(name) => {
+          setDrafts((current) =>
+            current.map((draft) => ({
+              ...draft,
+              tags: draft.tags?.filter((tag) => tag !== name) ?? [],
+            }))
+          );
+          setAllTags((current) => current.filter((tag) => tag !== name));
+          setFilterTag((current) => (current === name ? null : current));
         }}
       />
       <PublishedAtModal

@@ -3,6 +3,11 @@ export interface RenameValidation {
   error: string | null;
 }
 
+export interface CreateValidation {
+  name: string;
+  error: string | null;
+}
+
 export interface TagOption {
   value: string;
   label: string;
@@ -26,6 +31,20 @@ export function buildTagOptions(
 export function canCreateTag(input: string, options: TagOption[]): boolean {
   const name = input.trim();
   return name.length > 0 && !options.some((o) => o.value === name);
+}
+
+// 校验新建项目/标签名称：清理空格后非空，且不与现有名称重复。
+// 用于分类管理抽屉与文章信息抽屉的手动新建入口。
+export function validateCreate(
+  input: string,
+  existingNames: string[]
+): CreateValidation {
+  const name = input.trim();
+  if (!name) return { name, error: "名称不能为空" };
+  if (existingNames.some((n) => n === name)) {
+    return { name, error: "名称已存在" };
+  }
+  return { name, error: null };
 }
 
 // 将新标签追加进当前已选列表：清理空格 + 去重，返回新数组（不可变）。

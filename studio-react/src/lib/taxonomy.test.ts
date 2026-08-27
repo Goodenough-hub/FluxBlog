@@ -3,6 +3,7 @@ import {
   appendTag,
   buildTagOptions,
   canCreateTag,
+  validateCreate,
   validateRename,
 } from "./taxonomy";
 
@@ -77,5 +78,24 @@ describe("appendTag", () => {
     const current = ["前端"];
     expect(appendTag(current, "   ")).toBe(current);
     expect(appendTag(current, "前端")).toBe(current);
+  });
+});
+
+describe("validateCreate", () => {
+  it("清理名称两端空格并允许使用新名称", () => {
+    expect(validateCreate("  新项目  ", ["旧项目"])).toEqual({
+      name: "新项目",
+      error: null,
+    });
+  });
+
+  it("拒绝空名称与已存在名称", () => {
+    expect(validateCreate("   ", ["已有"]).error).toBe("名称不能为空");
+    expect(validateCreate("已有", ["已有"]).error).toBe("名称已存在");
+    expect(validateCreate("  已有  ", ["已有"]).error).toBe("名称已存在");
+  });
+
+  it("大小写敏感：React 与 react 视为不同名称", () => {
+    expect(validateCreate("react", ["React"]).error).toBeNull();
   });
 });

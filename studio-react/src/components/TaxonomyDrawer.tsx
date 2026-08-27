@@ -1,13 +1,23 @@
 import { useEffect, useState } from "react";
-import { App as AntdApp, Button, Drawer, Empty, Input, Tabs, Tag } from "antd";
-import { FiCheck, FiEdit2, FiLayers, FiTag, FiX } from "react-icons/fi";
+import {
+  App as AntdApp,
+  Button,
+  Divider,
+  Drawer,
+  Empty,
+  Input,
+  Popconfirm,
+  Tabs,
+  Tag,
+} from "antd";
+import { FiCheck, FiEdit2, FiLayers, FiPlus, FiTag, FiTrash2, FiX } from "react-icons/fi";
 import {
   projectsApi,
   tagsApi,
   type Draft,
   type Project,
 } from "../api/client";
-import { validateRename } from "../lib/taxonomy";
+import { validateCreate, validateRename } from "../lib/taxonomy";
 
 interface TaxonomyDrawerProps {
   open: boolean;
@@ -16,7 +26,11 @@ interface TaxonomyDrawerProps {
   projects: Project[];
   tags: string[];
   onProjectRenamed: (project: Project) => void;
+  onProjectCreated: (project: Project) => void;
+  onProjectDeleted: (id: number) => void;
   onTagRenamed: (oldName: string, newName: string) => void;
+  onTagCreated: (name: string) => void;
+  onTagDeleted: (name: string) => void;
 }
 
 interface EditingItem {
@@ -32,17 +46,29 @@ export default function TaxonomyDrawer({
   projects,
   tags,
   onProjectRenamed,
+  onProjectCreated,
+  onProjectDeleted,
   onTagRenamed,
+  onTagCreated,
+  onTagDeleted,
 }: TaxonomyDrawerProps) {
   const { message } = AntdApp.useApp();
   const [editing, setEditing] = useState<EditingItem | null>(null);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // 新建输入
+  const [newProjectName, setNewProjectName] = useState("");
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+  const [creatingTag, setCreatingTag] = useState(false);
+
   useEffect(() => {
     if (!open) {
       setEditing(null);
       setName("");
+      setNewProjectName("");
+      setNewTagName("");
     }
   }, [open]);
 
@@ -80,6 +106,102 @@ export default function TaxonomyDrawer({
       setSaving(false);
     }
   };
+
+  const handleCreateProject = async () => {
+    const validation = validateCreate(newProjectName, projects.map((p) => p.name));
+    if (validation.error) {
+      message.warning(validation.error);
+      return;
+    }
+    setCreatingProject(true);
+    try {
+      const p = await projectsApi.create({ name: validation.name });
+      onProjectCreated(p);
+      setNewProjectName("");
+      message.success(`已创建项目：${validation.name}`);
+    } catch (error: any) {
+      message.error(error.message);
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
+  const handleCreateTag = async () => {
+    const validation = validateCreate(newTagName, tags);
+    if (validation.error) {
+      message.warning(validation.error);
+      return;
+    }
+    setCreatingTag(true);
+    try {
+      await tagsApi.create(validation.name);
+      onTagCreated(validation.name);
+      setNewTagName("");
+      message.success(`已创建标签：${validation.name}`);
+    } catch (error: any) {
+      message.error(error.message);
+    } finally {
+      setCreatingTag(false);
+    }
+  };
+
+  const handleDeleteProject = async (id: number, projectName: string, count: number) => {
+    try {
+      await projectsApi.delete(id);
+      onProjectDeleted(id);
+      message.success(
+        count > 0
+          ? `已删除项目「${projectName}」，${count} 篇文章变为无归属`
+          : `已删除项目「${projectName}」`
+      );
+    } catch (error: any) {
+      message.error(error.message);
+    }
+  };
+
+  const handleDeleteTag = async (tagName: string, count: number) => {
+    try {
+      await tagsApi.delete(tagName);
+      onTagDeleted(tagName);
+      message.success(
+        count > 0
+          ? `已删除标签「${tagName}」，从 ${count} 篇文章中移除`
+          : `已删除标签「${tagName}」`
+      );
+    } catch (error: any) {
+      message.error(error.message);
+    }
+  };
+
+  const renderCreateBar = (
+    value: string,
+    onChange: (v: string) => void,
+    onConfirm: () => void,
+    loading: boolean,
+    placeholder: string
+  ) => (
+    <div className="mb-4 flex items-center gap-2">
+      <Input
+        placeholder={placeholder}
+        value={value}
+        maxLength={100}
+        onChange={(e) => onChange(e.target.value)}
+        onPressEnter={(e) => {
+          e.preventDefault();
+          void onConfirm();
+        }}
+        className="flex-1"
+      />
+      <Button
+        type="primary"
+        icon={<FiPlus size={14} />}
+        loading={loading}
+        onClick={() => void onConfirm()}
+      >
+        新建
+      </Button>
+    </div>
+  );
 
   const renderRow = (
     kind: "project" | "tag",
@@ -134,48 +256,104 @@ export default function TaxonomyDrawer({
             />
           </div>
         ) : (
-          <Button
-            type="text"
-            size="small"
-            icon={<FiEdit2 />}
-            aria-label={`修改 ${itemName}`}
-            onClick={() => startEditing({ kind, key, currentName: itemName })}
-          >
-            改名
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              type="text"
+              size="small"
+              icon={<FiEdit2 />}
+              aria-label={`修改 ${itemName}`}
+              onClick={() => startEditing({ kind, key, currentName: itemName })}
+            >
+              改名
+            </Button>
+            <Popconfirm
+              title={
+                count > 0
+                  ? `确认删除「${itemName}」？`
+                  : `确认删除「${itemName}」？`
+              }
+              description={
+                kind === "project"
+                  ? count > 0
+                    ? `${count} 篇文章将变为无归属，文章不会删除。`
+                    : "此操作不可撤销。"
+                  : count > 0
+                    ? `从 ${count} 篇草稿及已发布版本中彻底移除，不可恢复。`
+                    : "此操作不可撤销。"
+              }
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={() =>
+                kind === "project"
+                  ? void handleDeleteProject(Number(key), itemName, count)
+                  : void handleDeleteTag(itemName, count)
+              }
+            >
+              <Button
+                type="text"
+                size="small"
+                danger
+                icon={<FiTrash2 />}
+                aria-label={`删除 ${itemName}`}
+              />
+            </Popconfirm>
+          </div>
         )}
       </div>
     );
   };
 
-  const projectContent = projects.length ? (
+  const projectContent = (
     <div>
-      {projects.map((project) =>
-        renderRow(
-          "project",
-          String(project.id),
-          project.name,
-          drafts.filter((draft) => draft.projectId === project.id).length
-        )
+      {renderCreateBar(
+        newProjectName,
+        setNewProjectName,
+        handleCreateProject,
+        creatingProject,
+        "新建项目名称"
+      )}
+      {projects.length ? (
+        <div>
+          {projects.map((project) =>
+            renderRow(
+              "project",
+              String(project.id),
+              project.name,
+              drafts.filter((draft) => draft.projectId === project.id).length
+            )
+          )}
+        </div>
+      ) : (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无项目" />
       )}
     </div>
-  ) : (
-    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无项目" />
   );
 
-  const tagContent = tags.length ? (
+  const tagContent = (
     <div>
-      {tags.map((tag) =>
-        renderRow(
-          "tag",
-          tag,
-          tag,
-          drafts.filter((draft) => draft.tags?.includes(tag)).length
-        )
+      {renderCreateBar(
+        newTagName,
+        setNewTagName,
+        handleCreateTag,
+        creatingTag,
+        "新建标签名称"
+      )}
+      {tags.length ? (
+        <div>
+          {tags.map((tag) =>
+            renderRow(
+              "tag",
+              tag,
+              tag,
+              drafts.filter((draft) => draft.tags?.includes(tag)).length
+            )
+          )}
+        </div>
+      ) : (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无标签" />
       )}
     </div>
-  ) : (
-    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无标签" />
   );
 
   return (
@@ -186,11 +364,12 @@ export default function TaxonomyDrawer({
       open={open}
       onClose={onClose}
       destroyOnClose={false}
-      extra={<Tag color="blue">改名立即同步文章</Tag>}
+      extra={<Tag color="blue">改动立即同步文章</Tag>}
     >
       <p className="mb-3 text-xs leading-5 text-slate-500 dark:text-slate-400">
-        项目与标签改名后，FluxBlog 前台及已发布文章会同步更新，无需重新发布。
+        项目与标签的新增、改名、删除会同步至 FluxBlog 前台及已发布文章，无需重新发布。
       </p>
+      <Divider style={{ margin: "0 0 12px" }} />
       <Tabs
         items={[
           { key: "projects", label: `项目 ${projects.length}`, children: projectContent },

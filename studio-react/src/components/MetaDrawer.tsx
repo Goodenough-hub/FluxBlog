@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Drawer, Form, Input, Select, Button, Divider } from "antd";
+import { App as AntdApp, Drawer, Form, Input, Select, Button, Divider } from "antd";
 import { FiType, FiAlignLeft, FiTag, FiLink, FiImage, FiShield, FiLayers, FiPlus } from "react-icons/fi";
 import type { Draft, Project } from "../api/client";
-import { appendTag, buildTagOptions, canCreateTag } from "../lib/taxonomy";
+import { projectsApi } from "../api/client";
+import { appendTag, buildTagOptions, canCreateTag, validateCreate } from "../lib/taxonomy";
 
 const { TextArea } = Input;
 
@@ -24,6 +25,7 @@ interface MetaDrawerProps {
   allTags: string[];
   value: MetaFormValue;
   onChange: (v: MetaFormValue) => void;
+  onProjectCreated?: (p: Project) => void;
 }
 
 // 右侧元数据抽屉：标题/slug/标签/摘要/封面/可见性/项目归属。
@@ -38,7 +40,9 @@ export default function MetaDrawer({
   allTags,
   value,
   onChange,
+  onProjectCreated,
 }: MetaDrawerProps) {
+  const { message } = AntdApp.useApp();
   const [form] = Form.useForm<MetaFormValue>();
 
   // value 每次输入都会变，用 ref 读取最新值，避免把它放进依赖导致
@@ -66,6 +70,8 @@ export default function MetaDrawer({
   );
 
   const [newTagName, setNewTagName] = useState("");
+  const [newProjectName, setNewProjectName] = useState("");
+  const [creatingProject, setCreatingProject] = useState(false);
 
   // 手动新建标签：追加进表单已选列表。form.setFieldValue 不触发 onValuesChange，
   // 需手动回传 onChange，保证 Editor 的 meta 同步更新。
@@ -76,6 +82,28 @@ export default function MetaDrawer({
     form.setFieldValue("tags", next);
     onChange(form.getFieldsValue());
     setNewTagName("");
+  };
+
+  // 新建项目：调用后端创建后自动选中，并通知 Editor 更新项目列表。
+  const handleCreateProject = async () => {
+    const validation = validateCreate(newProjectName, projects.map((p) => p.name));
+    if (validation.error) {
+      message.warning(validation.error);
+      return;
+    }
+    setCreatingProject(true);
+    try {
+      const p = await projectsApi.create({ name: validation.name });
+      onProjectCreated?.(p);
+      form.setFieldValue("projectId", p.id);
+      onChange(form.getFieldsValue());
+      setNewProjectName("");
+      message.success(`已创建项目：${validation.name}`);
+    } catch (e: any) {
+      message.error(e.message);
+    } finally {
+      setCreatingProject(false);
+    }
   };
 
   return (
@@ -185,6 +213,32 @@ export default function MetaDrawer({
             allowClear
             placeholder="无归属"
             options={projects.map((p) => ({ value: p.id, label: p.name }))}
+            dropdownRender={(menu) => (
+              <>
+                {menu}
+                <Divider style={{ margin: "8px 0" }} />
+                <div className="flex items-center gap-2 px-1 pb-1">
+                  <Input
+                    placeholder="新建项目名称"
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    onPressEnter={(e) => {
+                      e.preventDefault();
+                      void handleCreateProject();
+                    }}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="text"
+                    icon={<FiPlus size={14} />}
+                    onClick={() => void handleCreateProject()}
+                    loading={creatingProject}
+                  >
+                    新建
+                  </Button>
+                </div>
+              </>
+            )}
           />
         </Form.Item>
       </Form>
