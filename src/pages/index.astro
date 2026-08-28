@@ -78,7 +78,7 @@ const homePath = getRelativeLocaleUrl(locale, "");
       }
     </section>
 
-    <ContributionGraph posts={posts} />
+    <ContributionGraph posts={posts} labels={t.home.contribution} />
 
     {
       recentPosts.length > 0 && (

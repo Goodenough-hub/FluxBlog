@@ -18,6 +18,8 @@ export type ContributionDay = {
   /** Zero-based day of week, Sunday first. */
   weekday: number;
   count: number;
+  /** Number of private posts included in `count`. */
+  privateCount: number;
   level: ContributionLevel;
   isToday: boolean;
   isFuture: boolean;
@@ -40,6 +42,7 @@ export type ContributionCalendar = {
   weeks: ContributionDay[][];
   monthMarkers: ContributionMonthMarker[];
   totalCount: number;
+  totalPrivateCount: number;
   activeDays: number;
   maxCount: number;
 };
@@ -85,6 +88,7 @@ export function buildContributionCalendar(
   const weekCount = CONTRIBUTION_WEEKS;
 
   const countByDate = new Map<string, number>();
+  const privateCountByDate = new Map<string, number>();
   for (const post of posts) {
     if (!post.publishedAt) continue;
 
@@ -96,6 +100,9 @@ export function buildContributionCalendar(
 
     const key = formatLocalDate(published);
     countByDate.set(key, (countByDate.get(key) ?? 0) + 1);
+    if (post.visibility === "private") {
+      privateCountByDate.set(key, (privateCountByDate.get(key) ?? 0) + 1);
+    }
   }
 
   const todayKey = formatLocalDate(today);
@@ -113,11 +120,13 @@ export function buildContributionCalendar(
       const isFuture = date.isAfter(today);
       const isInRange = !date.isBefore(rangeStart) && !isFuture;
       const count = isInRange ? (countByDate.get(key) ?? 0) : 0;
+      const privateCount = isInRange ? (privateCountByDate.get(key) ?? 0) : 0;
 
       week.push({
         date: key,
         weekday,
         count,
+        privateCount,
         level: getContributionLevel(count),
         isToday: key === todayKey,
         isFuture,
@@ -149,12 +158,14 @@ export function buildContributionCalendar(
   }
 
   const counts = Array.from(countByDate.values());
+  const privateCounts = Array.from(privateCountByDate.values());
   return {
     startDate: formatLocalDate(rangeStart),
     endDate: formatLocalDate(today),
     weeks,
     monthMarkers,
     totalCount: counts.reduce((sum, count) => sum + count, 0),
+    totalPrivateCount: privateCounts.reduce((sum, count) => sum + count, 0),
     activeDays: countByDate.size,
     maxCount: counts.length > 0 ? Math.max(...counts) : 0,
   };

@@ -5,7 +5,11 @@ import {
   getContributionLevel,
 } from "./contributionCalendar";
 
-function makePost(id: number, publishedAt: string | null): PostSummary {
+function makePost(
+  id: number,
+  publishedAt: string | null,
+  visibility: "public" | "private" = "public"
+): PostSummary {
   return {
     id,
     slug: `post-${id}`,
@@ -13,7 +17,7 @@ function makePost(id: number, publishedAt: string | null): PostSummary {
     description: "",
     tags: [],
     status: "published",
-    visibility: "public",
+    visibility,
     version: 1,
     publishedAt,
     updatedAt: "2026-08-01T00:00:00.000Z",
@@ -67,6 +71,24 @@ describe("buildContributionCalendar", () => {
     expect(calendar.maxCount).toBe(2);
   });
 
+  it("统计私有文章数量，且色阶按公开加私有的总数计算", () => {
+    const calendar = buildContributionCalendar(
+      [
+        makePost(1, "2026-08-20T09:00:00.000+08:00"),
+        makePost(2, "2026-08-20T18:00:00.000+08:00", "private"),
+      ],
+      options
+    );
+
+    expect(findDay(calendar, "2026-08-20")).toMatchObject({
+      count: 2,
+      privateCount: 1,
+      level: 2,
+    });
+    expect(calendar.totalCount).toBe(2);
+    expect(calendar.totalPrivateCount).toBe(1);
+  });
+
   it("按上海时区处理 UTC 日期边界", () => {
     const calendar = buildContributionCalendar(
       [makePost(1, "2026-08-26T16:30:00.000Z")],
@@ -92,6 +114,7 @@ describe("buildContributionCalendar", () => {
     );
 
     expect(calendar.totalCount).toBe(0);
+    expect(calendar.totalPrivateCount).toBe(0);
     expect(calendar.activeDays).toBe(0);
     expect(calendar.maxCount).toBe(0);
   });
@@ -168,6 +191,7 @@ describe("buildContributionCalendar", () => {
       true
     );
     expect(calendar.totalCount).toBe(0);
+    expect(calendar.totalPrivateCount).toBe(0);
     expect(calendar.activeDays).toBe(0);
   });
 });

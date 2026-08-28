@@ -35,9 +35,9 @@ export default {
     allPosts: "全部文章",
     contribution: {
       title: "发布动态",
-      summary: "近一年发布 {{count}} 篇 · 活跃 {{days}} 天",
-      empty: "近一年暂无发布",
-      graphLabel: "发布贡献图：近一年发布 {{count}} 篇，活跃 {{days}} 天",
+      summary: "近一年公开发布 {{count}} 篇 · 活跃 {{days}} 天",
+      empty: "近一年暂无公开发布",
+      graphLabel: "公开发布贡献图：近一年发布 {{count}} 篇，活跃 {{days}} 天",
       legendLabel: "颜色越深表示当天发布的文章越多",
       hint: "悬停、轻点或用方向键查看某日详情",
       less: "少",
@@ -45,6 +45,26 @@ export default {
       dayEmpty: "{{date}} · 无发布",
       dayOne: "{{date}} · 发布 {{count}} 篇",
       dayMany: "{{date}} · 发布 {{count}} 篇",
+      dayWithPrivate: "{{date}} · 发布 {{count}} 篇",
+    },
+  },
+  preview: {
+    contribution: {
+      title: "发布动态（含私有）",
+      summary:
+        "近一年发布 {{count}} 篇 · 私有 {{privateCount}} 篇 · 活跃 {{days}} 天",
+      empty: "近一年暂无公开或私有发布",
+      graphLabel:
+        "预览发布贡献图：近一年发布 {{count}} 篇，其中私有 {{privateCount}} 篇，活跃 {{days}} 天",
+      legendLabel: "颜色越深表示当天发布的文章越多",
+      hint: "悬停、轻点或用方向键查看某日详情",
+      less: "少",
+      more: "多",
+      dayEmpty: "{{date}} · 无发布",
+      dayOne: "{{date}} · 发布 {{count}} 篇",
+      dayMany: "{{date}} · 发布 {{count}} 篇",
+      dayWithPrivate:
+        "{{date}} · 发布 {{count}} 篇（私有 {{privateCount}} 篇）",
     },
   },
   footer: {

@@ -5,6 +5,7 @@ import Header from "@/components/Header.astro";
 import Breadcrumb from "@/components/Breadcrumb.astro";
 import Main from "@/components/Main.astro";
 import Card from "@/components/Card.astro";
+import ContributionGraph from "@/components/ContributionGraph.astro";
 import Footer from "@/components/Footer.astro";
 import Pagination from "@/components/Pagination.astro";
 import { listAllPostsForAdmin } from "@/utils/blogApi";
@@ -47,7 +48,16 @@ const nextUrl = lastPage > 1 ? pageUrl(2) : undefined;
 
   <Breadcrumb linkBase="preview" />
 
-  <Main pageTitle="博客预览" pageDesc="所有已发布文章（公开 + 私有），仅 admin 可见。">
+  <Main
+    pageTitle="博客预览"
+    pageDesc="所有已发布文章（公开 + 私有），仅 admin 可见。"
+  >
+    <ContributionGraph
+      posts={all}
+      labels={t.preview.contribution}
+      showPrivateCounts={true}
+      class="pb-8"
+    />
     <ul>
       {slice.map(post => <Card post={post} linkBase="preview" />)}
     </ul>

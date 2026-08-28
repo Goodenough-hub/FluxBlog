@@ -1,6 +1,7 @@
 ---
 import config from "@/config";
-import { tplStr, useTranslations } from "@/i18n";
+import { tplStr } from "@/i18n";
+import type { ContributionStrings } from "@/i18n/types";
 import type { PostSummary } from "@/utils/blogTypes";
 import {
   buildContributionCalendar,
@@ -10,11 +11,19 @@ import {
 
 type Props = {
   posts: PostSummary[];
+  labels: ContributionStrings;
+  /** Show how many private posts are included in a day's total. */
+  showPrivateCounts?: boolean;
+  class?: string;
 };
 
-const { posts } = Astro.props;
+const {
+  posts,
+  labels,
+  showPrivateCounts = false,
+  class: className = "pt-10 pb-4",
+} = Astro.props;
 const locale = Astro.currentLocale ?? config.site.lang;
-const t = useTranslations(locale);
 
 const calendar = buildContributionCalendar(posts, {
   timezone: config.site.timezone,
@@ -44,24 +53,33 @@ function formatDate(date: string): string {
 function formatDayLabel(day: ContributionDay): string {
   const date = formatDate(day.date);
   if (day.count === 0) {
-    return tplStr(t.home.contribution.dayEmpty, { date });
+    return tplStr(labels.dayEmpty, { date });
   }
 
-  const template =
-    day.count === 1 ? t.home.contribution.dayOne : t.home.contribution.dayMany;
+  if (showPrivateCounts && day.privateCount > 0) {
+    return tplStr(labels.dayWithPrivate, {
+      count: day.count,
+      date,
+      privateCount: day.privateCount,
+    });
+  }
+
+  const template = day.count === 1 ? labels.dayOne : labels.dayMany;
   return tplStr(template, { count: day.count, date });
 }
 
 const summary =
   calendar.totalCount > 0
-    ? tplStr(t.home.contribution.summary, {
+    ? tplStr(labels.summary, {
         count: calendar.totalCount,
         days: calendar.activeDays,
+        privateCount: calendar.totalPrivateCount,
       })
-    : t.home.contribution.empty;
-const graphLabel = tplStr(t.home.contribution.graphLabel, {
+    : labels.empty;
+const graphLabel = tplStr(labels.graphLabel, {
   count: calendar.totalCount,
   days: calendar.activeDays,
+  privateCount: calendar.totalPrivateCount,
 });
 const weekdayLabels =
   locale === "zh-CN"
@@ -71,12 +89,12 @@ const weekdayLabels =
 
 <section
   id="contribution-graph"
-  class="pt-10 pb-4"
+  class={className}
   aria-labelledby="contribution-title"
 >
   <div class="mb-4">
     <h2 id="contribution-title" class="text-2xl font-semibold tracking-wide">
-      {t.home.contribution.title}
+      {labels.title}
     </h2>
     <p class="text-muted-foreground mt-1 text-sm tabular-nums">
       {summary}
@@ -152,17 +170,17 @@ const weekdayLabels =
         data-contribution-detail
         aria-live="polite"
       >
-        {t.home.contribution.hint}
+        {labels.hint}
       </p>
       <div class="contribution-legend">
-        <span class="sr-only">{t.home.contribution.legendLabel}</span>
-        <span aria-hidden="true">{t.home.contribution.less}</span>
+        <span class="sr-only">{labels.legendLabel}</span>
+        <span aria-hidden="true">{labels.less}</span>
         {
           CONTRIBUTION_LEVELS.map(level => (
             <span class="contribution-legend-cell" data-level={level} />
           ))
         }
-        <span aria-hidden="true">{t.home.contribution.more}</span>
+        <span aria-hidden="true">{labels.more}</span>
       </div>
     </div>
   </div>

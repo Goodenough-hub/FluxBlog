@@ -1,3 +1,18 @@
+export interface ContributionStrings {
+  title: string;
+  summary: string;
+  empty: string;
+  graphLabel: string;
+  legendLabel: string;
+  hint: string;
+  less: string;
+  more: string;
+  dayEmpty: string;
+  dayOne: string;
+  dayMany: string;
+  dayWithPrivate: string;
+}
+
 export interface UIStrings {
   nav: {
     home: string;
@@ -31,19 +46,10 @@ export interface UIStrings {
     featured: string;
     recentPosts: string;
     allPosts: string;
-    contribution: {
-      title: string;
-      summary: string;
-      empty: string;
-      graphLabel: string;
-      legendLabel: string;
-      hint: string;
-      less: string;
-      more: string;
-      dayEmpty: string;
-      dayOne: string;
-      dayMany: string;
-    };
+    contribution: ContributionStrings;
+  };
+  preview: {
+    contribution: ContributionStrings;
   };
   footer: {
     copyright: string;
