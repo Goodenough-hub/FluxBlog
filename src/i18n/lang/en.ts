@@ -33,6 +33,20 @@ export default {
     featured: "Featured",
     recentPosts: "Recent Posts",
     allPosts: "All Posts",
+    contribution: {
+      title: "Publishing Activity",
+      summary: "Posts in the last year: {{count}} · Active days: {{days}}",
+      empty: "No posts in the last year",
+      graphLabel:
+        "Publishing activity graph: {{count}} posts across {{days}} active days in the last year",
+      legendLabel: "Darker colors indicate more posts published on that day",
+      hint: "Hover, tap, or use arrow keys to inspect a day",
+      less: "Less",
+      more: "More",
+      dayEmpty: "{{date}} · No posts",
+      dayOne: "{{date}} · {{count}} post",
+      dayMany: "{{date}} · {{count}} posts",
+    },
   },
   footer: {
     copyright: "Copyright",

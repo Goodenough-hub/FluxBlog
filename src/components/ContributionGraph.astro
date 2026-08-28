@@ -1,0 +1,607 @@
+---
+import config from "@/config";
+import { tplStr, useTranslations } from "@/i18n";
+import type { PostSummary } from "@/utils/blogTypes";
+import {
+  buildContributionCalendar,
+  CONTRIBUTION_LEVELS,
+  type ContributionDay,
+} from "@/utils/contributionCalendar";
+
+type Props = {
+  posts: PostSummary[];
+};
+
+const { posts } = Astro.props;
+const locale = Astro.currentLocale ?? config.site.lang;
+const t = useTranslations(locale);
+
+const calendar = buildContributionCalendar(posts, {
+  timezone: config.site.timezone,
+});
+const gridTemplateColumns = `repeat(${calendar.weeks.length}, var(--cell-size))`;
+
+const dateFormatter = new Intl.DateTimeFormat(locale, {
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+  year: "numeric",
+});
+const monthFormatter = new Intl.DateTimeFormat(locale, {
+  month: "short",
+  timeZone: "UTC",
+});
+
+function parseLocalDate(date: string): Date {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function formatDate(date: string): string {
+  return dateFormatter.format(parseLocalDate(date));
+}
+
+function formatDayLabel(day: ContributionDay): string {
+  const date = formatDate(day.date);
+  if (day.count === 0) {
+    return tplStr(t.home.contribution.dayEmpty, { date });
+  }
+
+  const template =
+    day.count === 1 ? t.home.contribution.dayOne : t.home.contribution.dayMany;
+  return tplStr(template, { count: day.count, date });
+}
+
+const summary =
+  calendar.totalCount > 0
+    ? tplStr(t.home.contribution.summary, {
+        count: calendar.totalCount,
+        days: calendar.activeDays,
+      })
+    : t.home.contribution.empty;
+const graphLabel = tplStr(t.home.contribution.graphLabel, {
+  count: calendar.totalCount,
+  days: calendar.activeDays,
+});
+const weekdayLabels =
+  locale === "zh-CN"
+    ? ["", "一", "", "三", "", "五", ""]
+    : ["", "Mon", "", "Wed", "", "Fri", ""];
+---
+
+<section
+  id="contribution-graph"
+  class="pt-10 pb-4"
+  aria-labelledby="contribution-title"
+>
+  <div class="mb-4">
+    <h2 id="contribution-title" class="text-2xl font-semibold tracking-wide">
+      {t.home.contribution.title}
+    </h2>
+    <p class="text-muted-foreground mt-1 text-sm tabular-nums">
+      {summary}
+    </p>
+  </div>
+
+  <div class="contribution-panel" data-contribution-graph>
+    <div class="contribution-main">
+      <div class="contribution-weekdays" aria-hidden="true">
+        {weekdayLabels.map(label => <span>{label}</span>)}
+      </div>
+
+      <div class="contribution-scroll" data-contribution-scroll>
+        <div
+          class="contribution-months"
+          style={`grid-template-columns: ${gridTemplateColumns};`}
+          aria-hidden="true"
+        >
+          {
+            calendar.monthMarkers.map(marker => (
+              <span style={`grid-column-start: ${marker.weekIndex + 1};`}>
+                {monthFormatter.format(
+                  new Date(Date.UTC(marker.year, marker.month - 1, 1))
+                )}
+              </span>
+            ))
+          }
+        </div>
+
+        <div
+          class="contribution-grid"
+          data-contribution-grid
+          style={`grid-template-columns: ${gridTemplateColumns};`}
+          role="group"
+          aria-label={graphLabel}
+        >
+          {
+            calendar.weeks.map((week, weekIndex) =>
+              week.map(day =>
+                day.isInRange ? (
+                  <button
+                    type="button"
+                    class="contribution-day"
+                    data-contribution-day
+                    data-date={day.date}
+                    data-count={day.count}
+                    data-level={day.level}
+                    data-label={formatDayLabel(day)}
+                    data-today={day.isToday ? "true" : undefined}
+                    data-week={weekIndex}
+                    data-weekday={day.weekday}
+                    tabindex={day.isToday ? 0 : -1}
+                    aria-label={formatDayLabel(day)}
+                  />
+                ) : (
+                  <span
+                    class="contribution-day contribution-placeholder"
+                    data-level="0"
+                    aria-hidden="true"
+                  />
+                )
+              )
+            )
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="contribution-footer">
+      <p
+        id="contribution-detail"
+        class="contribution-detail"
+        data-contribution-detail
+        aria-live="polite"
+      >
+        {t.home.contribution.hint}
+      </p>
+      <div class="contribution-legend">
+        <span class="sr-only">{t.home.contribution.legendLabel}</span>
+        <span aria-hidden="true">{t.home.contribution.less}</span>
+        {
+          CONTRIBUTION_LEVELS.map(level => (
+            <span class="contribution-legend-cell" data-level={level} />
+          ))
+        }
+        <span aria-hidden="true">{t.home.contribution.more}</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .contribution-panel {
+    --cell-size: 10px;
+    --cell-gap: 3px;
+    --weekday-width: 20px;
+    --month-label-height: 14px;
+    --month-label-gap: 8px;
+
+    padding: 0.75rem;
+    overflow: hidden;
+    background: var(--color-background);
+    background: color-mix(
+      in srgb,
+      var(--color-muted) 22%,
+      var(--color-background)
+    );
+    border: 1px solid var(--color-border);
+    border-color: color-mix(in srgb, var(--color-border) 68%, transparent);
+    border-radius: 16px;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+  }
+
+  [data-theme="dark"] .contribution-panel {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  }
+
+  .contribution-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .contribution-weekdays {
+    display: grid;
+    flex: 0 0 var(--weekday-width);
+    width: var(--weekday-width);
+    padding-top: calc(var(--month-label-height) + var(--month-label-gap));
+    grid-template-rows: repeat(7, var(--cell-size));
+    row-gap: var(--cell-gap);
+    color: var(--color-muted-foreground);
+    font-size: 10px;
+    line-height: var(--cell-size);
+    letter-spacing: 0.02em;
+    user-select: none;
+  }
+
+  .contribution-scroll {
+    padding: 4px 2px 6px;
+    margin: -4px -2px -6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-color: var(--color-muted) transparent;
+    scrollbar-width: thin;
+    scroll-padding-inline: 0.75rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .contribution-scroll::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .contribution-scroll::-webkit-scrollbar-thumb {
+    background: var(--color-muted);
+    border-radius: 2px;
+  }
+
+  .contribution-months {
+    display: grid;
+    width: max-content;
+    height: var(--month-label-height);
+    margin-bottom: var(--month-label-gap);
+    column-gap: var(--cell-gap);
+    color: var(--color-muted-foreground);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    line-height: var(--month-label-height);
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  .contribution-months > span {
+    min-width: 0;
+    grid-row: 1;
+    overflow: visible;
+  }
+
+  .contribution-grid {
+    position: relative;
+    display: grid;
+    width: max-content;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(7, var(--cell-size));
+    gap: var(--cell-gap);
+  }
+
+  .contribution-day {
+    display: block;
+    width: var(--cell-size);
+    height: var(--cell-size);
+    padding: 0;
+    appearance: none;
+    background: var(--contribution-0);
+    border: 0;
+    border-radius: 3px;
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--color-foreground) 7%, transparent);
+    cursor: pointer;
+    transition:
+      transform 120ms ease-out,
+      box-shadow 120ms ease-out,
+      background-color 160ms ease-out;
+  }
+
+  .contribution-day[data-level="1"] {
+    background: var(--contribution-1);
+  }
+
+  .contribution-day[data-level="2"] {
+    background: var(--contribution-2);
+  }
+
+  .contribution-day[data-level="3"] {
+    background: var(--contribution-3);
+  }
+
+  .contribution-day[data-level="4"] {
+    background: var(--contribution-4);
+  }
+
+  .contribution-day[data-today="true"] {
+    box-shadow:
+      inset 0 0 0 1px
+        color-mix(in srgb, var(--color-foreground) 7%, transparent),
+      0 0 0 1px var(--color-background),
+      0 0 0 2px color-mix(in srgb, var(--color-accent) 58%, transparent);
+  }
+
+  .contribution-day:hover {
+    z-index: 1;
+    box-shadow:
+      0 0 0 1px var(--color-background),
+      0 0 0 3px color-mix(in srgb, var(--color-accent) 52%, transparent);
+    transform: scale(1.14);
+  }
+
+  .contribution-day:active {
+    transform: scale(0.94);
+  }
+
+  .contribution-day:focus-visible {
+    z-index: 2;
+    outline: 2px dashed var(--color-accent);
+    outline-offset: 1px;
+  }
+
+  .contribution-day[data-selected="true"] {
+    z-index: 1;
+    box-shadow:
+      0 0 0 1px var(--color-background),
+      0 0 0 3px var(--color-accent);
+  }
+
+  .contribution-placeholder {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .contribution-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 1.25rem;
+    margin-top: 0.75rem;
+    color: var(--color-muted-foreground);
+    font-size: 11px;
+    line-height: 1.25rem;
+  }
+
+  .contribution-detail {
+    min-width: 0;
+    overflow: hidden;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .contribution-legend {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    letter-spacing: 0.02em;
+  }
+
+  .contribution-legend-cell {
+    width: 8px;
+    height: 8px;
+    background: var(--contribution-0);
+    border-radius: 2px;
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--color-foreground) 7%, transparent);
+  }
+
+  .contribution-legend-cell[data-level="1"] {
+    background: var(--contribution-1);
+  }
+
+  .contribution-legend-cell[data-level="2"] {
+    background: var(--contribution-2);
+  }
+
+  .contribution-legend-cell[data-level="3"] {
+    background: var(--contribution-3);
+  }
+
+  .contribution-legend-cell[data-level="4"] {
+    background: var(--contribution-4);
+  }
+
+  @media (max-width: 639.98px) {
+    .contribution-footer {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 0.375rem;
+    }
+
+    .contribution-legend {
+      align-self: flex-end;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .contribution-day {
+      transition: none;
+    }
+
+    .contribution-day:hover,
+    .contribution-day:active {
+      transform: none;
+    }
+  }
+
+  @media (prefers-contrast: more) {
+    .contribution-panel {
+      border-color: var(--color-foreground);
+    }
+
+    .contribution-day,
+    .contribution-legend-cell {
+      box-shadow: inset 0 0 0 1px var(--color-foreground);
+    }
+  }
+</style>
+
+<script>
+  function initContributionGraphs() {
+    document
+      .querySelectorAll("[data-contribution-graph]")
+      .forEach(graphNode => {
+        if (!(graphNode instanceof HTMLElement)) return;
+        if (graphNode.dataset.enhanced === "true") return;
+        graphNode.dataset.enhanced = "true";
+
+        const scrollNode = graphNode.querySelector(
+          "[data-contribution-scroll]"
+        );
+        const gridNode = graphNode.querySelector("[data-contribution-grid]");
+        const detailNode = graphNode.querySelector(
+          "[data-contribution-detail]"
+        );
+        if (
+          !(scrollNode instanceof HTMLElement) ||
+          !(gridNode instanceof HTMLElement) ||
+          !(detailNode instanceof HTMLElement)
+        ) {
+          return;
+        }
+        const scrollContainer: HTMLElement = scrollNode;
+        const detailElement: HTMLElement = detailNode;
+
+        const days = Array.from(
+          gridNode.querySelectorAll("[data-contribution-day]")
+        ).filter(
+          (day): day is HTMLButtonElement => day instanceof HTMLButtonElement
+        );
+        if (days.length === 0) return;
+
+        const defaultDetail = detailElement.textContent ?? "";
+        const dayByPosition = new Map(
+          days.map(day => [`${day.dataset.week}:${day.dataset.weekday}`, day])
+        );
+        let currentDay =
+          days.find(day => day.dataset.today === "true") ??
+          days[days.length - 1];
+        let activeDay: HTMLButtonElement | null = null;
+
+        function setRovingTab(nextDay: HTMLButtonElement) {
+          currentDay.tabIndex = -1;
+          nextDay.tabIndex = 0;
+          currentDay = nextDay;
+        }
+
+        function showDetail(day: HTMLButtonElement) {
+          detailElement.textContent = day.dataset.label ?? defaultDetail;
+        }
+
+        function setActiveDay(day: HTMLButtonElement) {
+          if (activeDay && activeDay !== day) {
+            delete activeDay.dataset.selected;
+          }
+          activeDay = day;
+          activeDay.dataset.selected = "true";
+          setRovingTab(day);
+          showDetail(day);
+        }
+
+        function clearActiveDay() {
+          if (activeDay) {
+            delete activeDay.dataset.selected;
+            activeDay = null;
+          }
+          detailElement.textContent = defaultDetail;
+        }
+
+        function ensureDayVisible(day: HTMLButtonElement) {
+          const padding = 12;
+          const dayLeft = day.offsetLeft;
+          const dayRight = dayLeft + day.offsetWidth;
+          const visibleLeft = scrollContainer.scrollLeft;
+          const visibleRight = visibleLeft + scrollContainer.clientWidth;
+
+          if (dayLeft < visibleLeft + padding) {
+            scrollContainer.scrollLeft = Math.max(0, dayLeft - padding);
+          } else if (dayRight > visibleRight - padding) {
+            scrollContainer.scrollLeft =
+              dayRight - scrollContainer.clientWidth + padding;
+          }
+        }
+
+        function moveBy(deltaWeek: number, deltaWeekday: number) {
+          const week = Number(currentDay.dataset.week);
+          const weekday = Number(currentDay.dataset.weekday);
+          const nextDay = dayByPosition.get(
+            `${week + deltaWeek}:${weekday + deltaWeekday}`
+          );
+          if (!nextDay) return;
+
+          setActiveDay(nextDay);
+          nextDay.focus({ preventScroll: true });
+          ensureDayVisible(nextDay);
+        }
+
+        gridNode.addEventListener("pointerover", event => {
+          const day =
+            event.target instanceof Element
+              ? event.target.closest("[data-contribution-day]")
+              : null;
+          if (day instanceof HTMLButtonElement) showDetail(day);
+        });
+
+        gridNode.addEventListener("pointerleave", () => {
+          detailElement.textContent = activeDay
+            ? (activeDay.dataset.label ?? defaultDetail)
+            : defaultDetail;
+        });
+
+        gridNode.addEventListener("pointerdown", event => {
+          const day =
+            event.target instanceof Element
+              ? event.target.closest("[data-contribution-day]")
+              : null;
+          if (day instanceof HTMLButtonElement) setActiveDay(day);
+        });
+
+        gridNode.addEventListener("focusin", event => {
+          if (event.target instanceof HTMLButtonElement) {
+            setActiveDay(event.target);
+          }
+        });
+
+        gridNode.addEventListener("focusout", event => {
+          if (
+            !(event.relatedTarget instanceof Node) ||
+            !gridNode.contains(event.relatedTarget)
+          ) {
+            clearActiveDay();
+          }
+        });
+
+        gridNode.addEventListener("keydown", event => {
+          if (!(event.target instanceof HTMLButtonElement)) return;
+
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            moveBy(-1, 0);
+          } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            moveBy(1, 0);
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            moveBy(0, -1);
+          } else if (event.key === "ArrowDown") {
+            event.preventDefault();
+            moveBy(0, 1);
+          } else if (event.key === "PageUp") {
+            event.preventDefault();
+            moveBy(-4, 0);
+          } else if (event.key === "PageDown") {
+            event.preventDefault();
+            moveBy(4, 0);
+          } else if (event.key === "Home") {
+            event.preventDefault();
+            setActiveDay(days[0]);
+            days[0].focus({ preventScroll: true });
+            ensureDayVisible(days[0]);
+          } else if (event.key === "End") {
+            event.preventDefault();
+            const lastDay = days[days.length - 1];
+            setActiveDay(lastDay);
+            lastDay.focus({ preventScroll: true });
+            ensureDayVisible(lastDay);
+          }
+        });
+
+        requestAnimationFrame(() => {
+          if (graphNode.isConnected) {
+            scrollContainer.scrollLeft = scrollContainer.scrollWidth;
+          }
+        });
+      });
+  }
+
+  document.addEventListener("astro:page-load", initContributionGraphs);
+  initContributionGraphs();
+</script>

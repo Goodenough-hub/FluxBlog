@@ -20,6 +20,18 @@
   --muted: #e6e6e6;
   --muted-foreground: #6b7280;
   --border: #ece9e9;
+
+  /* Contribution graph fallbacks for browsers without color-mix(). */
+  --contribution-0: #edf1f3;
+  --contribution-1: #c7dfec;
+  --contribution-2: #8ec4dc;
+  --contribution-3: #459bc7;
+  --contribution-4: #006cac;
+  --contribution-0: color-mix(in oklab, var(--muted) 55%, var(--background));
+  --contribution-1: color-mix(in oklab, var(--accent) 22%, var(--muted));
+  --contribution-2: color-mix(in oklab, var(--accent) 45%, var(--muted));
+  --contribution-3: color-mix(in oklab, var(--accent) 70%, var(--muted));
+  --contribution-4: var(--accent);
 }
 
 /* Dark theme values */
@@ -31,4 +43,16 @@
   --muted: #343f60;
   --muted-foreground: #afb9ca;
   --border: #ab4b08;
+
+  /* Contribution graph fallbacks for browsers without color-mix(). */
+  --contribution-0: #2b344b;
+  --contribution-1: #604320;
+  --contribution-2: #925716;
+  --contribution-3: #cf6508;
+  --contribution-4: #ff6b01;
+  --contribution-0: color-mix(in oklab, var(--muted) 50%, var(--background));
+  --contribution-1: color-mix(in oklab, var(--accent) 28%, var(--muted));
+  --contribution-2: color-mix(in oklab, var(--accent) 50%, var(--muted));
+  --contribution-3: color-mix(in oklab, var(--accent) 75%, var(--muted));
+  --contribution-4: var(--accent);
 }

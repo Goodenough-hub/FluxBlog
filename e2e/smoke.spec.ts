@@ -45,6 +45,73 @@ test("首页与文章可达", async ({ page }) => {
   await expect(page.locator("article")).toBeVisible();
 });
 
+test("首页贡献图可用且不造成页面横向溢出", async ({ page }) => {
+  await page.goto("");
+
+  const graph = page.locator("#contribution-graph");
+  const days = graph.locator("[data-contribution-day]");
+  const detail = graph.locator("[data-contribution-detail]");
+  await expect(graph).toBeVisible();
+  expect(await days.count()).toBeGreaterThanOrEqual(365);
+  expect(await days.count()).toBeLessThanOrEqual(371);
+
+  const defaultDetail = await detail.textContent();
+  await days.last().focus();
+  await expect(days.last()).toBeFocused();
+  await expect(detail).not.toHaveText(defaultDetail ?? "");
+
+  await page.keyboard.press("ArrowLeft");
+  const focusedDay = graph.locator("[data-contribution-day]:focus");
+  await expect(focusedDay).toBeVisible();
+  await expect(detail).toHaveText(
+    (await focusedDay.getAttribute("data-label")) ?? ""
+  );
+
+  const scroller = graph.locator("[data-contribution-scroll]");
+  const scrollMetrics = await scroller.evaluate(element => ({
+    clientWidth: element.clientWidth,
+    scrollLeft: element.scrollLeft,
+    scrollWidth: element.scrollWidth,
+  }));
+  const maxScrollLeft = scrollMetrics.scrollWidth - scrollMetrics.clientWidth;
+  const viewportWidth = page.viewportSize()?.width ?? 0;
+  if (viewportWidth >= 640) {
+    expect(maxScrollLeft).toBeLessThanOrEqual(1);
+  } else if (maxScrollLeft > 0) {
+    expect(scrollMetrics.scrollLeft).toBeGreaterThan(maxScrollLeft - 2);
+  }
+
+  const hasPageOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth + 1
+  );
+  expect(hasPageOverflow).toBe(false);
+});
+
+test("贡献图色阶随深浅主题切换", async ({ page }) => {
+  await page.goto("");
+
+  const legendCells = page.locator(".contribution-legend-cell");
+  const readColors = () =>
+    legendCells.evaluateAll(cells =>
+      cells.map(cell => getComputedStyle(cell).backgroundColor)
+    );
+  const lightColors = await readColors();
+  expect(new Set(lightColors).size).toBe(5);
+
+  const html = page.locator("html");
+  const beforeTheme = await html.getAttribute("data-theme");
+  const menuButton = page.locator("#menu-btn");
+  if (await menuButton.isVisible()) {
+    await menuButton.click();
+  }
+  await page.locator("#theme-btn").click();
+  await expect.poll(() => html.getAttribute("data-theme")).not.toBe(beforeTheme);
+
+  const darkColors = await readColors();
+  expect(new Set(darkColors).size).toBe(5);
+  expect(darkColors).not.toEqual(lightColors);
+});
+
 test("搜索页可用", async ({ page }) => {
   await page.goto("search/");
   await page.getByPlaceholder(/search|搜索/i).first().fill("FluxBlog");
