@@ -42,7 +42,6 @@ interface PublishModalProps {
   draft: Draft;
   projects: Project[];
   allTags: string[];
-  isRepublish: boolean;
   loading: boolean;
   onProjectCreated?: (p: Project) => void;
 }
@@ -54,7 +53,6 @@ export default function PublishModal({
   draft,
   projects,
   allTags,
-  isRepublish,
   loading,
   onProjectCreated,
 }: PublishModalProps) {
@@ -170,7 +168,7 @@ export default function PublishModal({
 
   return (
     <Modal
-      title={isRepublish ? "更新发布" : "发布文章"}
+      title="发布文章"
       open={open}
       onCancel={onClose}
       width={520}
@@ -179,7 +177,7 @@ export default function PublishModal({
           取消
         </Button>,
         <Button key="ok" type="primary" loading={loading} onClick={submit}>
-          {scheduleEnabled ? "定时发布" : isRepublish ? "更新发布" : "发布"}
+          {scheduleEnabled ? "定时发布" : "发布"}
         </Button>,
       ]}
       destroyOnClose

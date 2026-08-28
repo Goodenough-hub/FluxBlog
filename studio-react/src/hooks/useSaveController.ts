@@ -34,7 +34,7 @@ interface UseSaveControllerOptions {
   seededInput?: SaveInput | null;
 }
 
-// 自动保存 hook：8s 防抖 + 严格 single-flight + 乐观锁 + IndexedDB 快照。
+// 自动保存 hook：3s 防抖 + 严格 single-flight + 乐观锁 + IndexedDB 快照。
 // 冲突（HTTP 409）→ 进入 blocked 态，pending 保留供解决后重试；调
 // resolveConflict() 恢复 idle。其他错误进入 error 态，可重试。
 export function useSaveController({
@@ -48,6 +48,10 @@ export function useSaveController({
   const [state, setState] = useState<SaveState>("idle");
   const [lastError, setLastError] = useState<string | null>(null);
   const [savedVersion, setSavedVersion] = useState<number>(baseVersion);
+  // hasPending 是 pendingRef 的响应式镜像：pendingRef 用 ref 保证 pump/flush 读写
+  // 无闭包过期问题，但 ref 变化不触发渲染，而 dirty 需要驱动 UI（如"更新发布"
+  // 按钮），所以每个 pendingRef 变更点都要同步 setHasPending。
+  const [hasPending, setHasPending] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef<SaveInput | null>(null);
@@ -83,6 +87,7 @@ export function useSaveController({
     draftIdRefForReset.current = draftId;
     lastSavedInputRef.current = seededInputRef.current;
     pendingRef.current = null;
+    setHasPending(false);
     // 同步 savedVersion，让 PreviewFrame 的 reloadKey 跳到新草稿版本
     setSavedVersion(baseVersion);
   }
@@ -110,6 +115,7 @@ export function useSaveController({
         if (err instanceof ApiError && err.status === 409) {
           // 冲突：进入 blocked，保留 pending 供解决后重试
           pendingRef.current = input;
+          setHasPending(true);
           setStateSafe("blocked");
           // 拉取服务端最新版本，触发冲突 UI
           try {
@@ -134,6 +140,7 @@ export function useSaveController({
       return;
     const input = pendingRef.current;
     pendingRef.current = null;
+    setHasPending(false);
     inFlightRef.current = doSave(input, baseVersionRef.current)
       .catch(() => {
         // 错误已在 doSave 处理；这里吞掉让 pump 不抛
@@ -148,14 +155,23 @@ export function useSaveController({
   const schedule = useCallback(
     (input: SaveInput) => {
       if (stateRef.current === "blocked") return; // 冲突未解决，禁止保存
-      // 输入与上次成功保存一致 → 无需再保存（避免保存→版本+1→useEffect 触发→再保存 死循环）
+      // 输入与上次成功保存一致 → 无需再保存（避免保存→版本+1→useEffect 触发→再保存 死循环）。
+      // 同时取消可能挂着的中间版本保存：用户撤销回已保存内容时，pending 里的旧输入
+      // 已不代表用户意图，存它只会白白 version+1 并让 hasUnpublishedChanges 卡 true。
       if (
         lastSavedInputRef.current &&
         inputKey(lastSavedInputRef.current) === inputKey(input)
       ) {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        pendingRef.current = null;
+        setHasPending(false);
         return;
       }
       pendingRef.current = input;
+      setHasPending(true);
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => pump(), debounceMs);
     },
@@ -171,6 +187,7 @@ export function useSaveController({
     while (pendingRef.current && stateRef.current !== "blocked") {
       const input = pendingRef.current;
       pendingRef.current = null;
+      setHasPending(false);
       try {
         await doSave(input, baseVersionRef.current);
       } catch {
@@ -182,6 +199,7 @@ export function useSaveController({
 
   const resolveConflict = useCallback(() => {
     pendingRef.current = null;
+    setHasPending(false);
     setStateSafe("idle");
     setLastError(null);
   }, []);
@@ -208,7 +226,9 @@ export function useSaveController({
     []
   );
 
-  const dirty = pendingRef.current !== null || stateRef.current !== "idle";
+  // dirty = 有排队未保存的修改 或 保存进行中/冲突/失败。两者都是响应式 state，
+  // 可直接驱动 UI（如"更新发布"按钮、beforeunload 拦截）。
+  const dirty = hasPending || state !== "idle";
 
   return {
     state,

@@ -43,6 +43,7 @@ import HistoryDrawer from "../components/HistoryDrawer";
 import ConflictModal, { type ConflictInfo } from "../components/ConflictModal";
 import PublishModal, { type PublishFormValue } from "../components/PublishModal";
 import { useScrollSync } from "../hooks/useScrollSync";
+import { editorPublishState } from "../lib/publish-state";
 
 const STATUS_COLOR: Record<string, string> = {
   draft: "default",
@@ -161,7 +162,7 @@ export default function EditorPage() {
   }, []);
 
   // seededInput：草稿加载后用与服务端一致的 input 初始化 lastSavedInputRef，
-  // 让 useSaveController 在用户未做任何修改时不触发 8s 自动保存。
+  // 让 useSaveController 在用户未做任何修改时不触发 3s 自动保存。
   const seededInput = useMemo<SaveInput | null>(() => {
     if (!draft || !meta) return null;
     return buildSaveInput(markdown, meta);
@@ -538,8 +539,14 @@ export default function EditorPage() {
     );
   }
 
+  // 发布按钮三态：服务端 hasUnpublishedChanges 要等自动保存往返才更新，
+  // 本地 sc.dirty 编辑即真，二者任一成立就显示"更新发布"。
   const isPublished = draft.status === "published";
-  const needsRepublish = isPublished && draft.hasUnpublishedChanges === true;
+  const publishState = editorPublishState({
+    status: draft.status,
+    hasUnpublishedChanges: draft.hasUnpublishedChanges,
+    dirty: sc.dirty,
+  });
 
   return (
     <div className="flex h-screen flex-col bg-slate-50 text-slate-700 dark:bg-boxdark dark:text-slate-300">
@@ -592,7 +599,7 @@ export default function EditorPage() {
             onClick={() => setMetaDrawerOpen(true)}
           />
         </Tooltip>
-        {needsRepublish ? (
+        {publishState === "republish" ? (
           <>
             <Button
               type="primary"
@@ -699,7 +706,6 @@ export default function EditorPage() {
         draft={draft}
         projects={projects}
         allTags={allTags}
-        isRepublish={needsRepublish}
         loading={publishLoading}
         onProjectCreated={(p) => setProjects((prev) => [...prev, p])}
       />
