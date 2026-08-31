@@ -129,6 +129,8 @@ test("文章代码块为 Xcode 窗口风（含行号/复制，需后端）", asy
   await expect(win).toBeVisible();
   await expect(win.locator(".xcode-dots")).toBeVisible();
   await expect(win.locator(".xcode-copy")).toBeVisible();
+  // 回归：旧主题遗留的英文 Copy 按钮（.copy-code）已删除，不得再出现
+  await expect(page.locator(".copy-code")).toHaveCount(0);
   // 行号 gutter：第一行 ::before 计数存在（检查 line 元素存在即可）
   await expect(win.locator("pre.line-numbers .line").first()).toBeVisible();
 });
