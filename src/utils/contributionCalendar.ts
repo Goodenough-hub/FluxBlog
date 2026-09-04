@@ -61,6 +61,13 @@ export function getContributionLevel(count: number): ContributionLevel {
   return 4;
 }
 
+/** Weekday labels for the seven Sunday-first calendar rows. */
+export function getWeekdayLabels(locale: string): string[] {
+  return locale === "zh-CN"
+    ? ["", "周一", "", "周三", "", "周五", ""]
+    : ["", "Mon", "", "Wed", "", "Fri", ""];
+}
+
 function formatLocalDate(value: dayjs.Dayjs): string {
   return value.format("YYYY-MM-DD");
 }

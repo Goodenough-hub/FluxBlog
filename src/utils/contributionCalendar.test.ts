@@ -3,6 +3,7 @@ import type { PostSummary } from "./blogTypes";
 import {
   buildContributionCalendar,
   getContributionLevel,
+  getWeekdayLabels,
 } from "./contributionCalendar";
 
 function makePost(
@@ -39,6 +40,27 @@ describe("getContributionLevel", () => {
     expect(getContributionLevel(3)).toBe(3);
     expect(getContributionLevel(4)).toBe(4);
     expect(getContributionLevel(12)).toBe(4);
+  });
+});
+
+describe("getWeekdayLabels", () => {
+  it("中文标签使用完整星期名称并保持七行对齐", () => {
+    expect(getWeekdayLabels("zh-CN")).toEqual([
+      "",
+      "周一",
+      "",
+      "周三",
+      "",
+      "周五",
+      "",
+    ]);
+  });
+
+  it("英文及未知语言使用英文星期缩写", () => {
+    const expected = ["", "Mon", "", "Wed", "", "Fri", ""];
+
+    expect(getWeekdayLabels("en")).toEqual(expected);
+    expect(getWeekdayLabels("ja")).toEqual(expected);
   });
 });
 

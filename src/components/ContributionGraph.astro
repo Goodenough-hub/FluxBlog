@@ -6,6 +6,7 @@ import type { PostSummary } from "@/utils/blogTypes";
 import {
   buildContributionCalendar,
   CONTRIBUTION_LEVELS,
+  getWeekdayLabels,
   type ContributionDay,
 } from "@/utils/contributionCalendar";
 
@@ -81,10 +82,7 @@ const graphLabel = tplStr(labels.graphLabel, {
   days: calendar.activeDays,
   privateCount: calendar.totalPrivateCount,
 });
-const weekdayLabels =
-  locale === "zh-CN"
-    ? ["", "一", "", "三", "", "五", ""]
-    : ["", "Mon", "", "Wed", "", "Fri", ""];
+const weekdayLabels = getWeekdayLabels(locale);
 ---
 
 <section
@@ -190,7 +188,7 @@ const weekdayLabels =
   .contribution-panel {
     --cell-size: 10px;
     --cell-gap: 3px;
-    --weekday-width: 20px;
+    --weekday-width: 26px;
     --month-label-height: 14px;
     --month-label-gap: 8px;
 
@@ -230,6 +228,7 @@ const weekdayLabels =
     line-height: var(--cell-size);
     letter-spacing: 0.02em;
     user-select: none;
+    white-space: nowrap;
   }
 
   .contribution-scroll {
