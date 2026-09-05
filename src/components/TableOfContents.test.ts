@@ -32,3 +32,32 @@ describe("TableOfContents 大纲风格设计契约", () => {
     expect(src).toContain("position: sticky");
   });
 });
+
+// 回归：无 h2/h3 时组件早退不渲染 <aside>，若容器仍无条件带 xl:max-w-6xl，
+// main 的 flex-1 会撑满 1152px 容器并左移到目录原位（曾经的线上表现）。
+// 容器加宽必须与目录同时存在，否则退回站点标准宽 max-w-3xl 居中。
+const postPages = [
+  "../pages/posts/[...slug]/index.astro",
+  "../pages/private/[...slug]/index.astro",
+  "../pages/preview/[...slug]/index.astro",
+  "../pages/preview-draft/[id].astro",
+] as const;
+
+describe("文章页容器宽度随目录存在与否切换", () => {
+  it.each(postPages)("%s 不再无条件加宽到 xl:max-w-6xl", page => {
+    const pageSrc = readFileSync(
+      fileURLToPath(new URL(page, import.meta.url)),
+      "utf8"
+    );
+    expect(pageSrc).not.toContain('class="app-layout flex gap-8 xl:max-w-6xl"');
+  });
+
+  it.each(postPages)("%s 的 xl:max-w-6xl 绑定在有目录时", page => {
+    const pageSrc = readFileSync(
+      fileURLToPath(new URL(page, import.meta.url)),
+      "utf8"
+    );
+    expect(pageSrc).toContain('"app-layout flex gap-8"');
+    expect(pageSrc).toContain('{ "xl:max-w-6xl": tocHeadings.length > 0 }');
+  });
+});
